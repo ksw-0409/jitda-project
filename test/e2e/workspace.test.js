@@ -62,17 +62,51 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(initial.reportCount, 0);
 
   environment.notion.setMarkdown(notionMarkdown);
-  environment.notion.setMode("delay");
   browser("scrollintoview", "#load-notion-readme");
   browser("click", "#load-notion-readme");
+  const notionCodePrompt = evaluate(`({
+    formVisible: !document.querySelector("#notion-access-form").hidden,
+    inputType: document.querySelector("#notion-access-code-input").type,
+    sessionCodeBeforeEntry: sessionStorage.getItem("bugpin.notion-access-code"),
+    status: document.querySelector("#readme-feedback").textContent
+  })`);
+  assert.equal(notionCodePrompt.formVisible, true);
+  assert.equal(notionCodePrompt.inputType, "password");
+  assert.equal(notionCodePrompt.sessionCodeBeforeEntry, null);
+  assert.match(notionCodePrompt.status, /접근 코드를 입력/);
+
+  browser("fill", "#notion-access-code-input", "wrong-test-access-code");
+  browser("click", "#submit-notion-access-code");
+  await waitFor(
+    "return { done: document.querySelector('#readme-feedback').textContent === '접근 코드가 올바르지 않습니다' }",
+    "잘못된 Notion 접근 코드 안내",
+  );
+  const rejectedCode = evaluate(`({
+    status: document.querySelector("#readme-feedback").textContent,
+    sessionCode: sessionStorage.getItem("bugpin.notion-access-code"),
+    localStorageMentionsAccessCode: localStorage.getItem("bugpin.notion-access-code"),
+    inputValue: document.querySelector("#notion-access-code-input").value,
+    formVisible: !document.querySelector("#notion-access-form").hidden
+  })`);
+  assert.equal(rejectedCode.status, "접근 코드가 올바르지 않습니다");
+  assert.equal(rejectedCode.sessionCode, null);
+  assert.equal(rejectedCode.localStorageMentionsAccessCode, null);
+  assert.equal(rejectedCode.inputValue, "");
+  assert.equal(rejectedCode.formVisible, true);
+
+  browser("fill", "#notion-access-code-input", environment.notionAccessCode);
+  environment.notion.setMode("delay");
+  browser("click", "#submit-notion-access-code");
   const notionLoading = evaluate(`({
     disabled: document.querySelector("#load-notion-readme").disabled,
-    button: document.querySelector("#load-notion-readme").textContent,
+    submitDisabled: document.querySelector("#submit-notion-access-code").disabled,
+    button: document.querySelector("#submit-notion-access-code").textContent,
     statusKind: document.querySelector("#readme-feedback").dataset.kind,
     status: document.querySelector("#readme-feedback").textContent
   })`);
   assert.equal(notionLoading.disabled, true);
   assert.match(notionLoading.button, /불러오는 중/);
+  assert.equal(notionLoading.submitDisabled, true);
   assert.equal(notionLoading.statusKind, "loading");
   environment.notion.setMode("normal");
   await waitFor(
@@ -87,6 +121,47 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(notionLoaded.markdown, notionMarkdown);
   assert.match(notionLoaded.status, /노션 README를 불러왔습니다/);
   assert.equal(notionLoaded.ready, true);
+  const storedCodeChecks = evaluate(`({
+    sessionCode: sessionStorage.getItem("bugpin.notion-access-code"),
+    localStorageHasAccessKey: localStorage.getItem("bugpin.notion-access-code"),
+    urlHasAccessCode: location.href.includes("${environment.notionAccessCode}"),
+    pageTextHasAccessCode: document.body.innerText.includes("${environment.notionAccessCode}"),
+    passwordInputCleared: document.querySelector("#notion-access-code-input").value === ""
+  })`);
+  assert.equal(storedCodeChecks.sessionCode, environment.notionAccessCode);
+  assert.equal(storedCodeChecks.localStorageHasAccessKey, null);
+  assert.equal(storedCodeChecks.urlHasAccessCode, false);
+  assert.equal(storedCodeChecks.pageTextHasAccessCode, false);
+  assert.equal(storedCodeChecks.passwordInputCleared, true);
+  assert.equal(environment.notion.requests.at(-1).authorization, "Bearer notion-test-only-token");
+
+  browser("eval", `(() => {
+    window.__notionReadmeFetchOriginal = window.fetch.bind(window);
+    window.fetch = (input, options) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url === "/api/notion/readme") {
+        return Promise.resolve(new Response(JSON.stringify({ error: "잠시 후 다시 시도해 주세요" }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" }
+        }));
+      }
+      return window.__notionReadmeFetchOriginal(input, options);
+    };
+    return true;
+  })()`);
+  browser("click", "#load-notion-readme");
+  await waitFor("return { done: document.querySelector('#readme-feedback').textContent === '잠시 후 다시 시도해 주세요' }", "429 재시도 안내");
+  const rateLimitedUi = evaluate(`({
+    message: document.querySelector("#readme-feedback").textContent,
+    existingReadme: window.bugPinReadme,
+    sessionCodeRetained: Boolean(sessionStorage.getItem("bugpin.notion-access-code")),
+    buttonUnlocked: !document.querySelector("#load-notion-readme").disabled
+  })`);
+  assert.equal(rateLimitedUi.message, "잠시 후 다시 시도해 주세요");
+  assert.equal(rateLimitedUi.existingReadme, notionMarkdown);
+  assert.equal(rateLimitedUi.sessionCodeRetained, true);
+  assert.equal(rateLimitedUi.buttonUnlocked, true);
+  browser("eval", `(() => { window.fetch = window.__notionReadmeFetchOriginal; delete window.__notionReadmeFetchOriginal; return true; })()`);
 
   environment.notion.setMode("permission-denied");
   browser("click", "#load-notion-readme");

@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,11 @@ const maxGithubBugsForAnalysis = 30;
 const maxCodeExcerptCharsPerFile = 3600;
 const githubConnectionTtlMs = 30 * 60 * 1000;
 const githubConnections = new Map();
+const notionAccessAttempts = new Map();
+const notionAccessWindowMs = 60_000;
+const notionAccessFailureLimit = 10;
+const notionAccessBlockMs = 60_000;
+const maxNotionAccessTrackedIps = 10_000;
 const staticFiles = new Map([
   ["/", "index.html"],
   ["/index.html", "index.html"],
@@ -30,6 +35,12 @@ class HttpError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+function httpError(status, message, options = {}) {
+  const error = new HttpError(status, message);
+  if (Number.isInteger(options.retryAfter)) error.retryAfter = options.retryAfter;
+  return error;
 }
 
 function sendJson(response, status, value, extraHeaders = {}) {
@@ -72,7 +83,65 @@ function readJsonBody(request) {
 }
 
 function notionReadmeRouteIsEnabled() {
-  return process.env.NOTION_README_PRIVATE_DEPLOYMENT?.trim().toLowerCase() === "true";
+  return process.env.NOTION_README_PRIVATE_DEPLOYMENT?.trim().toLowerCase() === "true" &&
+    Boolean(process.env.BUGPIN_ACCESS_CODE?.trim());
+}
+
+function notionAccessClientIp(request) {
+  if (process.env.NODE_ENV === "test" && typeof request.headers["x-bugpin-test-ip"] === "string") {
+    return request.headers["x-bugpin-test-ip"].trim() || "test-unknown";
+  }
+  const address = request.socket?.remoteAddress || "unknown";
+  return address.startsWith("::ffff:") ? address.slice(7) : address;
+}
+
+function pruneNotionAccessAttempts(now) {
+  for (const [ip, state] of notionAccessAttempts) {
+    state.failures = state.failures.filter((timestamp) => now - timestamp < notionAccessWindowMs);
+    if (state.blockedUntil <= now && state.failures.length === 0) notionAccessAttempts.delete(ip);
+  }
+  while (notionAccessAttempts.size > maxNotionAccessTrackedIps) {
+    notionAccessAttempts.delete(notionAccessAttempts.keys().next().value);
+  }
+}
+
+function notionAccessCodeMatches(provided, expected) {
+  const providedDigest = createHash("sha256").update(provided, "utf8").digest();
+  const expectedDigest = createHash("sha256").update(expected, "utf8").digest();
+  return timingSafeEqual(providedDigest, expectedDigest);
+}
+
+function requireNotionAccessCode(request) {
+  if (!notionReadmeRouteIsEnabled()) {
+    throw new HttpError(404, "Notion README는 팀 접근 제한이 적용된 전용 환경에서만 사용할 수 있습니다.");
+  }
+
+  const expected = process.env.BUGPIN_ACCESS_CODE.trim();
+  const providedHeader = request.headers["x-access-code"];
+  const provided = typeof providedHeader === "string" ? providedHeader.trim() : "";
+  const ip = notionAccessClientIp(request);
+  const now = Date.now();
+  pruneNotionAccessAttempts(now);
+  const state = notionAccessAttempts.get(ip) || { failures: [], blockedUntil: 0 };
+
+  if (state.blockedUntil > now) {
+    throw httpError(429, "잠시 후 다시 시도해 주세요", {
+      retryAfter: Math.max(1, Math.ceil((state.blockedUntil - now) / 1000)),
+    });
+  }
+
+  if (!notionAccessCodeMatches(provided, expected)) {
+    state.failures.push(now);
+    if (state.failures.length > notionAccessFailureLimit) {
+      state.blockedUntil = now + notionAccessBlockMs;
+      notionAccessAttempts.set(ip, state);
+      throw httpError(429, "잠시 후 다시 시도해 주세요", { retryAfter: Math.ceil(notionAccessBlockMs / 1000) });
+    }
+    notionAccessAttempts.set(ip, state);
+    throw new HttpError(401, "접근 코드가 올바르지 않습니다");
+  }
+
+  notionAccessAttempts.delete(ip);
 }
 
 function validNotionPageId(value) {
@@ -1614,6 +1683,7 @@ const server = createServer(async (request, response) => {
         sendJson(response, 405, { error: "GET 요청만 사용할 수 있습니다." });
         return;
       }
+      requireNotionAccessCode(request);
       sendJson(response, 200, await fetchNotionReadmeMarkdown());
       return;
     }
@@ -1719,7 +1789,8 @@ const server = createServer(async (request, response) => {
     serveStatic(pathname, response);
   } catch (error) {
     if (error instanceof HttpError) {
-      sendJson(response, error.status, { error: error.message });
+      const headers = Number.isInteger(error.retryAfter) ? { "Retry-After": String(error.retryAfter) } : {};
+      sendJson(response, error.status, { error: error.message }, headers);
       return;
     }
     sendJson(response, 500, { error: "서버에서 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요." });

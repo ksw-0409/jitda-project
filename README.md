@@ -115,7 +115,8 @@ npm run dev
 | `GITHUB_TOKEN` | 선택 | 비공개 저장소 접근이나 GitHub API 한도 확대에 사용합니다. 공개 저장소는 토큰 없이도 조회할 수 있습니다. 저장소 읽기 권한만 부여하세요. |
 | `NOTION_TOKEN` | Notion 기능 사용 시 필수 | Notion internal integration 토큰입니다. 서버에서만 사용합니다. |
 | `NOTION_PAGE_ID` | Notion 기능 사용 시 필수 | README 본문을 가져올 Notion 일반 페이지 한 개의 ID입니다. |
-| `NOTION_README_PRIVATE_DEPLOYMENT` | 선택, 안전 설정 | `true`일 때만 Notion API 경로를 활성화합니다. 서버 앞단에 팀 전용 접근 제한이 실제로 적용된 배포에서만 설정하세요. 이 값 자체는 인증 기능이 아닙니다. |
+| `BUGPIN_ACCESS_CODE` | Notion 기능 사용 시 필수 | 팀이 공유하는 Notion 읽기 접근 코드입니다. 서버에서만 기대값을 보관하며 비어 있으면 API가 비활성화됩니다. |
+| `NOTION_README_PRIVATE_DEPLOYMENT` | 선택, 안전 설정 | `true`일 때만 Notion API 경로를 활성화합니다. `BUGPIN_ACCESS_CODE`도 설정돼 있어야 합니다. Notion 경로는 이 공유 접근 코드로 보호됩니다. |
 | `PORT` | 선택 | 서버 포트입니다. 기본값은 `3000`입니다. |
 
 ```dotenv
@@ -124,7 +125,8 @@ LLM_BASE_URL=
 GITHUB_TOKEN=
 NOTION_TOKEN=
 NOTION_PAGE_ID=
-# Set to true only behind a real team-only access gateway.
+BUGPIN_ACCESS_CODE=
+# Set true only for the team deployment that uses the shared access code.
 NOTION_README_PRIVATE_DEPLOYMENT=
 # PORT=3000
 ```
@@ -171,9 +173,11 @@ Notion README 불러오기는 서버 환경 변수로 지정한 일반 페이지
 
 짓다 배포의 서버 환경 변수 설정 화면에서 위 값을 등록하세요. 브라우저 코드, 요청 응답, 로그에 토큰을 직접 넣지 마세요. 저장된 `NOTION_TOKEN`은 서버가 Notion API를 호출할 때만 사용하고, `NOTION_PAGE_ID`는 가져올 페이지를 지정합니다.
 
-현재 앱 코드에는 사용자 로그인이나 팀 권한 미들웨어가 없습니다. 따라서 `/api/notion/readme`는 기본적으로 비활성화되어 404를 반환합니다. 이 기능을 켜려면 먼저 배포 앞단에서 팀 전용 접근 제한을 적용한 뒤 `NOTION_README_PRIVATE_DEPLOYMENT=true`로 설정하세요. 이 환경 변수는 외부 인증을 대신하지 않으며, 공개 배포에서 켜면 안 됩니다.
+앱에는 사용자 계정 로그인이 없으며, Notion README 경로는 팀이 공유하는 접근 코드로 잠급니다. `/api/notion/readme`는 `NOTION_README_PRIVATE_DEPLOYMENT=true`와 `BUGPIN_ACCESS_CODE`가 설정된 경우에만 활성화되고, 둘 중 하나라도 없으면 404로 비활성 상태를 반환합니다. 이 코드는 사용자별 계정 인증이 아닌 공유 코드이므로 팀 안에서만 전달하고 공개하지 마세요.
 
-Notion API 응답에 Markdown 본문이 비어 있으면 422, integration 인증이 잘못되면 401, 페이지 공유 권한이 없으면 403, 페이지 ID를 찾지 못하면 404로 안내합니다. 실패한 경우 화면에 이미 불러온 README 본문은 유지됩니다.
+화면에서 처음 `노션 README 불러오기`를 누르면 비밀번호 입력창이 열립니다. 입력한 코드는 현재 브라우저 탭의 `sessionStorage`에만 두고 Notion 요청의 `x-access-code` 헤더로 보냅니다. URL, `localStorage`, 저장소 코드, 서버 응답과 로그에는 코드를 남기지 않습니다. 탭을 닫으면 세션 저장 값이 사라집니다. 코드가 틀리면 401 응답 뒤 저장값을 지우고 다시 입력받습니다. 같은 IP에서 1분 안에 11회째 틀리면 60초 동안 429로 차단합니다. 서버는 SHA-256 digest를 `timingSafeEqual`로 비교하고 실패 횟수만 기록합니다.
+
+Notion API 응답에 Markdown 본문이 비어 있으면 422, 접근 코드가 없거나 틀리면 401, 반복 실패 차단은 429, integration 인증이 잘못되면 401, 페이지 공유 권한이 없으면 403, 페이지 ID를 찾지 못하면 404로 안내합니다. 실패한 경우 화면에 이미 불러온 README 본문은 유지됩니다.
 
 ### GitHub 저장소
 
@@ -188,7 +192,7 @@ https://github.com/<owner>/<repo>/tree/<branch>
 
 ## API
 
-분석·GitHub API는 같은 출처의 `POST` JSON 요청입니다. Notion 본문 API는 `GET`입니다. 실제 구현에는 CORS를 열어 두지 않았습니다.
+분석·GitHub API는 같은 출처의 `POST` JSON 요청입니다. Notion 본문 API는 `GET`과 `x-access-code` 헤더를 사용합니다. 실제 구현에는 CORS를 열어 두지 않았습니다.
 
 | 엔드포인트 | 역할 | 주요 요청 필드 |
 |---|---|---|
@@ -198,7 +202,7 @@ https://github.com/<owner>/<repo>/tree/<branch>
 | `/api/github/file` | 연결된 저장소의 C# 파일 읽기 | `connectionId`, `path` |
 | `/api/github/analyze-code` | 실제 GitHub 코드 기반 위치 분석 | `connectionId`, `bugs` |
 | `/api/locate-again` | 개발자 피드백을 반영해 다른 후보 재탐색 | `bug`, `reports`, `feedback`, `excluded`, `seen_candidates`, `round`, `readme` 또는 `connectionId`; GitHub에서는 선택적으로 `seen_files` · `POST` |
-| `/api/notion/readme` | 팀 전용 환경에서 지정 Notion 페이지의 Markdown 본문 가져오기 | 환경 변수 `NOTION_TOKEN`, `NOTION_PAGE_ID` · `GET` |
+| `/api/notion/readme` | 활성화된 팀 코드로 지정 Notion 페이지의 Markdown 본문 가져오기 | `x-access-code` 헤더; 서버 환경 변수 `NOTION_TOKEN`, `NOTION_PAGE_ID` · `GET` |
 
 ### `/api/analyze`
 
@@ -232,7 +236,7 @@ README에 적힌 스크립트 이름만 허용합니다. 각 버그 결과는 `{
 
 ### `/api/notion/readme`
 
-이 경로는 `GET` 요청이며 팀 전용 접근 제한을 전제로 기본 비활성화되어 있습니다. 활성화된 배포에서 서버가 아래 Notion API를 호출합니다.
+이 경로는 `GET` 요청이며 `NOTION_README_PRIVATE_DEPLOYMENT=true`와 `BUGPIN_ACCESS_CODE`가 설정되어야 동작합니다. 클라이언트는 `x-access-code` 헤더를 보내고, 서버는 환경 변수의 코드와 constant-time digest 비교를 합니다. IP별로 1분 동안 10회까지 실패 응답을 허용하고 11번째 실패부터 60초 차단합니다. 활성화된 배포에서 서버가 아래 Notion API를 호출합니다.
 
 ```text
 GET https://api.notion.com/v1/pages/{NOTION_PAGE_ID}/markdown
@@ -240,7 +244,7 @@ Authorization: Bearer <NOTION_TOKEN>
 Notion-Version: 2026-03-11
 ```
 
-Notion API의 `markdown` 본문 문자열을 `{ "markdown": "..." }` 형태로 반환합니다. Notion 페이지 제목이나 요약만 반환하는 대체 동작은 없습니다. 토큰은 응답에 포함되지 않습니다.
+접근 코드가 없거나 틀리면 `401 { "error": "접근 코드가 올바르지 않습니다" }`, IP 차단 중이면 `429 { "error": "잠시 후 다시 시도해 주세요" }`를 반환합니다. 비활성화 상태에서는 `404`입니다. Notion API의 `markdown` 본문 문자열을 `{ "markdown": "..." }` 형태로 반환하며 제목이나 요약만 반환하지 않습니다. `NOTION_TOKEN`과 `BUGPIN_ACCESS_CODE` 어느 것도 응답이나 서버 로그에 기록하지 않습니다.
 
 ### `/api/github/connect`와 `/api/github/file`
 
