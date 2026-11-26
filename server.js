@@ -21,6 +21,7 @@ const staticFiles = new Map([
   ["/sample_reports.csv", "sample_reports.csv"],
   ["/sample_README.md", "sample_README.md"],
   ["/analysis-view-model.js", "analysis-view-model.js"],
+  ["/fix-plan-model.js", "fix-plan-model.js"],
   ["/__preview-bridge.js", "__preview-bridge.js"],
 ]);
 

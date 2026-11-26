@@ -189,6 +189,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
     reasons: [...document.querySelectorAll(".suspect-empty")].map(node => node.textContent),
     codeLines: document.querySelectorAll(".suspect-lines").length,
     codeBlocks: document.querySelectorAll(".suspect-code-source").length,
+    planEditorsBeforeConfirmation: document.querySelectorAll(".fix-plan-card").length,
     feedback: document.querySelector("#readme-feedback").textContent
   })`);
   assert.equal(locations.labels.length, 5);
@@ -199,6 +200,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.ok(locations.scripts.includes("Update()"));
   assert.equal(locations.codeLines, 0);
   assert.equal(locations.codeBlocks, 0);
+  assert.equal(locations.planEditorsBeforeConfirmation, 0);
   assert.match(locations.feedback, /실제 코드 근거와 줄 번호는 확인되지 않았습니다/);
 
   const firstBugId = evaluate("window.bugPinAnalysis.bugs[0].bug_id");
@@ -302,6 +304,145 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(confirmed.confirmedFile, "PlayerHealth.cs");
   assert.equal(confirmed.badge, "확인됨");
   assert.equal(confirmed.stateRetained, true);
+
+  const initialPlanEditor = evaluate(`(() => {
+    const card = document.querySelector(".bug-card:nth-of-type(1)");
+    const today = new Date();
+    const expectedToday = String(today.getFullYear()) + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+    return {
+      visible: Boolean(card.querySelector(".fix-plan-card")),
+      hasAssignee: Boolean(card.querySelector(".fix-plan-assignee")),
+      hasDate: card.querySelector(".fix-plan-date")?.type,
+      dateMinimum: card.querySelector(".fix-plan-date")?.min,
+      expectedToday,
+      defaultPriority: card.querySelector('.fix-plan-priority[aria-pressed="true"]')?.dataset.priority,
+      preview: card.querySelector(".fix-plan-preview")?.textContent,
+      exportDisabledBeforePlan: document.querySelector(".fix-plan-export").disabled
+    };
+  })()`);
+  assert.equal(initialPlanEditor.visible, true);
+  assert.equal(initialPlanEditor.hasAssignee, true);
+  assert.equal(initialPlanEditor.hasDate, "date");
+  assert.equal(initialPlanEditor.dateMinimum, initialPlanEditor.expectedToday);
+  assert.equal(initialPlanEditor.defaultPriority, "medium");
+  assert.match(initialPlanEditor.preview, /담당자.*마감일까지 고쳐야 합니다/);
+  assert.equal(initialPlanEditor.exportDisabledBeforePlan, true);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-save");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-save");
+  const requiredErrors = evaluate(`(() => ({
+    assigneeError: document.querySelector(".bug-card:nth-of-type(1) [data-plan-error=assignee]").textContent,
+    dueError: document.querySelector(".bug-card:nth-of-type(1) [data-plan-error=due_date]").textContent,
+    stored: localStorage.getItem("bugpin.fix-plans.v1")
+  }))()`);
+  assert.match(requiredErrors.assigneeError, /담당자를 입력/);
+  assert.match(requiredErrors.dueError, /마감일을 선택/);
+  assert.equal(requiredErrors.stored, null);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-assignee");
+  browser("fill", ".bug-card:nth-of-type(1) .fix-plan-assignee", "강승우");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-quick-date:nth-of-type(2)");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-priority[data-priority=high]");
+  browser("fill", ".bug-card:nth-of-type(1) .fix-plan-memo", "OnCollisionStay2D에 피격 쿨타임 추가");
+  const planPreview = evaluate(`(() => ({
+    preview: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-preview").textContent,
+    date: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-date").value,
+    min: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-date").min,
+    assigneeSuggestionStored: JSON.parse(localStorage.getItem("bugpin.fix-plan-assignees.v1") || "[]").includes("강승우")
+  }))()`);
+  assert.match(planPreview.preview, /^강승우가 \d+\/\d+\(.+\)까지 고쳐야 합니다$/);
+  assert.ok(planPreview.date > planPreview.min);
+  assert.equal(planPreview.assigneeSuggestionStored, true);
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-save");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-save");
+  let savedPlan = evaluate(`(() => {
+    const plans = JSON.parse(localStorage.getItem("bugpin.fix-plans.v1"));
+    const plan = plans.find(item => item.bug_id === "${firstBugId}");
+    return {
+      plan,
+      keys: Object.keys(plan),
+      locationKeys: Object.keys(plan.location),
+      editorHidden: !document.querySelector(".bug-card:nth-of-type(1) .fix-plan-card"),
+      summary: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-line").textContent,
+      memo: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-memo").textContent,
+      planBadge: document.querySelector(".bug-card:nth-of-type(1) .bug-card-plan-badge").textContent,
+      exportEnabled: !document.querySelector(".fix-plan-export").disabled
+    };
+  })()`);
+  assert.deepEqual(savedPlan.keys, ["bug_id", "bug_title", "location", "assignee", "due_date", "priority", "memo", "status", "created_at", "updated_at"]);
+  assert.deepEqual(savedPlan.locationKeys, ["file", "function", "lines"]);
+  assert.equal(savedPlan.plan.assignee, "강승우");
+  assert.equal(savedPlan.plan.priority, "high");
+  assert.equal(savedPlan.plan.status, "planned");
+  assert.match(savedPlan.summary, /담당 강승우 · \d+\/\d+\(.+\)까지 · 우선순위 높음/);
+  assert.equal(savedPlan.memo, "OnCollisionStay2D에 피격 쿨타임 추가");
+  assert.match(savedPlan.planBadge, /담당 강승우 · D-1/);
+  assert.equal(savedPlan.exportEnabled, true);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-edit");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-edit");
+  assert.equal(evaluate("document.querySelector('.bug-card:nth-of-type(1) .fix-plan-assignee').value"), "강승우");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-cancel");
+  assert.equal(evaluate("!document.querySelector('.bug-card:nth-of-type(1) .fix-plan-card')"), true);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-reselect-button");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-reselect-button");
+  const heldPlan = evaluate(`(() => ({
+    status: window.bugPinLocationStates.get("${firstBugId}").plan.status,
+    summaryStatus: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary").dataset.status,
+    summary: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-line").textContent,
+    badge: document.querySelector(".bug-card:nth-of-type(1) .bug-card-plan-badge").textContent,
+    editorVisible: Boolean(document.querySelector(".bug-card:nth-of-type(1) .fix-plan-card")),
+    persistedStatus: JSON.parse(localStorage.getItem("bugpin.fix-plans.v1")).find(plan => plan.bug_id === "${firstBugId}").status
+  }))()`);
+  assert.equal(heldPlan.status, "on_hold");
+  assert.equal(heldPlan.summaryStatus, "on_hold");
+  assert.match(heldPlan.summary, /보류 · 담당 강승우/);
+  assert.match(heldPlan.badge, /보류 · 담당 강승우/);
+  assert.equal(heldPlan.editorVisible, false);
+  assert.equal(heldPlan.persistedStatus, "on_hold");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  assert.equal(evaluate(`window.bugPinLocationStates.get("${firstBugId}").plan.status`), "planned");
+  assert.equal(evaluate(`Boolean(document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary"))`), true);
+
+  const thirdBugId = evaluate("window.bugPinAnalysis.bugs[2].bug_id");
+  browser("scrollintoview", ".bug-card:nth-of-type(3) > summary");
+  browser("eval", `document.querySelector(".bug-card:nth-of-type(3)").open = true; true`);
+  browser("eval", `document.querySelector(".bug-card:nth-of-type(3) .suspect-card-action.is-confirm").scrollIntoView({ block: "center", behavior: "instant" }); true`);
+  browser("wait", "200");
+  browser("click", ".bug-card:nth-of-type(3) .suspect-card-action.is-confirm");
+  await waitFor("return { done: Boolean(document.querySelector('.bug-card:nth-of-type(3) .fix-plan-card')) }", "두 번째 버그 계획 입력");
+  assert.equal(evaluate("[...document.querySelector('#bugpin-fix-assignee-suggestions').options].some(option => option.value === '강승우')"), true);
+  browser("fill", ".bug-card:nth-of-type(3) .fix-plan-assignee", "민서");
+  browser("click", ".bug-card:nth-of-type(3) .fix-plan-quick-date:nth-of-type(1)");
+  browser("click", ".bug-card:nth-of-type(3) .fix-plan-priority[data-priority=low]");
+  browser("scrollintoview", ".bug-card:nth-of-type(3) .fix-plan-save");
+  browser("click", ".bug-card:nth-of-type(3) .fix-plan-save");
+  assert.equal(evaluate(`JSON.parse(localStorage.getItem("bugpin.fix-plans.v1")).find(plan => plan.bug_id === "${thirdBugId}").due_date`), planPreview.min);
+
+  browser("click", ".bug-sort-button[data-sort-mode=due]");
+  const dueOrder = evaluate(`JSON.stringify([...document.querySelectorAll(".bug-card")].map(card => card.dataset.bugId))`);
+  assert.equal(JSON.parse(dueOrder)[0], thirdBugId);
+  browser("click", ".bug-sort-button[data-sort-mode=priority]");
+  const priorityOrder = evaluate(`JSON.stringify([...document.querySelectorAll(".bug-card")].map(card => card.dataset.bugId))`);
+  assert.equal(JSON.parse(priorityOrder)[0], firstBugId);
+  browser("click", ".bug-sort-button[data-sort-mode=default]");
+  const defaultOrder = evaluate(`JSON.stringify([...document.querySelectorAll(".bug-card")].map(card => card.dataset.bugId))`);
+  assert.equal(JSON.parse(defaultOrder)[0], firstBugId);
+
+  browser("eval", `(() => {
+    URL.createObjectURL = blob => { window.__fixPlanExportBlob = blob; return "blob:fix-plan-test"; };
+    HTMLAnchorElement.prototype.click = function() { window.__fixPlanExportName = this.download; };
+    return true;
+  })()`);
+  browser("click", ".fix-plan-export");
+  const exported = await waitFor("return { done: Boolean(window.__fixPlanExportBlob), name: window.__fixPlanExportName }", "계획 JSON 내보내기");
+  assert.equal(exported.name, "bugpin-fix-plans.json");
+  const exportedJsonText = JSON.parse(await browser("eval", "window.__fixPlanExportBlob.text()"));
+  const exportedPlans = JSON.parse(exportedJsonText);
+  assert.equal(exportedPlans.length, 2);
+  assert.ok(exportedPlans.every((plan) => Object.keys(plan).join(",") === "bug_id,bug_title,location,assignee,due_date,priority,memo,status,created_at,updated_at"));
 
   environment.mock.setMode("rerun-none");
   browser("scrollintoview", ".bug-card:nth-of-type(2) .suspect-card-action.is-reject");
@@ -426,6 +567,16 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   environment.mock.setMode("normal");
   browser("reload");
   await waitFor("return { done: document.querySelector('#panel-summary-list') !== null }", "페이지 재로드");
+  const persistedPlans = evaluate(`(() => ({
+    plans: JSON.parse(localStorage.getItem("bugpin.fix-plans.v1") || "[]"),
+    assignees: JSON.parse(localStorage.getItem("bugpin.fix-plan-assignees.v1") || "[]"),
+    inMemoryCount: window.bugPinFixPlans.size
+  }))()`);
+  assert.equal(persistedPlans.plans.length, 2);
+  assert.equal(persistedPlans.inMemoryCount, 2);
+  assert.ok(persistedPlans.plans.some((plan) => plan.assignee === "강승우" && plan.location.file));
+  assert.ok(persistedPlans.plans.some((plan) => plan.assignee === "민서" && plan.priority === "low"));
+  assert.ok(persistedPlans.assignees.includes("강승우"));
 });
 
 test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·버그 카드 배지를 유지한다", async () => {

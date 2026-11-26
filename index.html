@@ -372,6 +372,11 @@
   .bug-card-field-label { color: #78847a; font-size: 10px; font-weight: 710; letter-spacing: .035em; }
   .bug-card-title { margin: 0; color: #1f2e24; font-size: 17px; font-weight: 740; letter-spacing: -.035em; line-height: 1.35; overflow-wrap: anywhere; }
   .bug-card-count { display: inline-flex; min-height: 30px; flex: 0 0 auto; align-items: center; padding: 4px 10px; border-radius: 20px; background: #eaf2e8; color: #365b3c; font-size: 12px; font-weight: 730; white-space: nowrap; }
+  .bug-card-plan-badge { display: inline-flex; width: fit-content; max-width: 100%; align-items: center; margin-top: 5px; padding: 4px 8px; border-radius: 7px; background: #e4f1df; color: #315c38; font-size: 10px; font-weight: 730; line-height: 1.4; overflow-wrap: anywhere; }
+  .bug-card-plan-badge[data-urgency="soon"] { background: #fff0d9; color: #8a5a12; }
+  .bug-card-plan-badge[data-urgency="today"], .bug-card-plan-badge[data-urgency="overdue"] { background: #fde8e4; color: #9a3f35; }
+  .bug-card-plan-badge[data-urgency="on_hold"] { background: #f0eee8; color: #71654b; }
+  .bug-card-plan-badge[hidden] { display: none; }
   .bug-card-symptom-label { display: block; margin-top: 10px; }
   .bug-card-symptom { display: -webkit-box; margin: 3px 0 0; overflow: hidden; color: #56645a; font-size: 14px; font-weight: 450; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
   .bug-card-detail { display: grid; gap: 18px; padding: 18px 19px 20px; border-top: 1px solid #ebefea; }
@@ -634,6 +639,53 @@
   .suspect-rerun-form { margin-top: 10px; }
   .suspect-rerun-form[hidden] { display: none; }
   .suspect-confirmed-note { margin: 8px 0 0; color: #41694a; font-size: 11px; line-height: 1.55; }
+  .fix-plan-card { display: grid; gap: 12px; margin-top: 12px; padding: 14px; border: 1px solid #d9e5d5; border-radius: 12px; background: #f8fbf6; }
+  .fix-plan-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; color: #35563b; font-size: 14px; font-weight: 760; }
+  .fix-plan-required { color: #8c6b32; font-size: 10px; font-weight: 650; }
+  .fix-plan-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 11px; }
+  .fix-plan-field { display: grid; min-width: 0; gap: 5px; }
+  .fix-plan-field.full { grid-column: 1 / -1; }
+  .fix-plan-label { color: #526354; font-size: 11px; font-weight: 720; }
+  .fix-plan-input, .fix-plan-date, .fix-plan-memo { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #d8e1d5; border-radius: 8px; background: #fff; color: #29382d; font: inherit; font-size: 12px; }
+  .fix-plan-memo { min-height: 70px; resize: vertical; line-height: 1.55; }
+  .fix-plan-input:focus-visible, .fix-plan-date:focus-visible, .fix-plan-memo:focus-visible { outline: 3px solid #95b788; outline-offset: 2px; }
+  .fix-plan-quick-dates { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fix-plan-quick-date, .fix-plan-priority { min-height: 32px; padding: 5px 9px; border: 1px solid #dce5d9; border-radius: 17px; background: #fff; color: #5a6b5c; font: inherit; font-size: 10px; font-weight: 680; cursor: pointer; }
+  .fix-plan-quick-date:hover, .fix-plan-priority:hover { background: #edf5e9; }
+  .fix-plan-priorities { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fix-plan-priority[aria-pressed="true"] { border-color: #779673; background: #e7f1e3; color: #34563a; }
+  .fix-plan-priority[data-priority="high"][aria-pressed="true"] { border-color: #d49b8c; background: #fff0eb; color: #8a493b; }
+  .fix-plan-preview { margin: 0; padding: 10px 11px; border-radius: 8px; background: #edf4e9; color: #3b5b40; font-size: 12px; font-weight: 690; line-height: 1.6; }
+  .fix-plan-error { color: #a33d35; font-size: 10px; line-height: 1.45; }
+  .fix-plan-error[hidden] { display: none; }
+  .fix-plan-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+  .fix-plan-save, .fix-plan-edit { min-height: 39px; padding: 7px 13px; border: 0; border-radius: 8px; background: var(--forest); color: #fff; font: inherit; font-size: 11px; font-weight: 720; cursor: pointer; }
+  .fix-plan-save:hover, .fix-plan-edit:hover { background: #2d4d40; }
+  .fix-plan-cancel { min-height: 39px; padding: 7px 12px; border: 1px solid #dce4d9; border-radius: 8px; background: #fff; color: #5b695d; font: inherit; font-size: 11px; font-weight: 680; cursor: pointer; }
+  .fix-plan-summary { display: grid; gap: 8px; margin-top: 12px; padding: 13px; border: 1px solid #d9e5d5; border-radius: 10px; background: #f5faf2; }
+  .fix-plan-summary[data-status="on_hold"] { border-color: #e7dfcf; background: #faf8f2; }
+  .fix-plan-summary-line { margin: 0; color: #354a38; font-size: 13px; font-weight: 730; line-height: 1.55; overflow-wrap: anywhere; }
+  .fix-plan-summary[data-status="on_hold"] .fix-plan-summary-line { color: #746549; }
+  .fix-plan-summary-meta { display: flex; flex-wrap: wrap; gap: 6px; color: #647367; font-size: 10px; line-height: 1.5; }
+  .fix-plan-summary-memo { margin: 0; padding: 9px 10px; border-radius: 7px; background: rgba(255, 255, 255, .78); color: #556259; font-size: 11px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .fix-plan-summary-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .fix-plan-status-label { color: #85693a; font-size: 10px; font-weight: 720; }
+  .bug-list-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 11px; }
+  .bug-sort-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bug-sort-button, .fix-plan-export { min-height: 36px; padding: 6px 10px; border: 1px solid #dce5d9; border-radius: 8px; background: #fff; color: #5d6b60; font: inherit; font-size: 10px; font-weight: 690; cursor: pointer; }
+  .bug-sort-button[aria-pressed="true"] { border-color: #7c9d77; background: #eaf3e7; color: #31553a; }
+  .fix-plan-export { border-color: #cedfca; background: #eef6eb; color: #355d3b; }
+  .fix-plan-export:disabled { cursor: not-allowed; opacity: .48; }
+  @media (max-width: 430px) {
+    .fix-plan-fields { grid-template-columns: minmax(0, 1fr); }
+    .fix-plan-field.full { grid-column: auto; }
+    .bug-list-toolbar { align-items: stretch; }
+    .bug-sort-controls { width: 100%; }
+    .bug-sort-button { flex: 1; padding-inline: 7px; }
+    .fix-plan-export { width: 100%; }
+    .suspect-selection-actionbar { grid-template-columns: minmax(0, 1fr); }
+    .suspect-selection-actionbar .suspect-multi-select-toggle, .suspect-selection-actionbar .suspect-feedback-form { grid-column: auto; }
+  }
 
   .page-footer {
     display: flex;
@@ -927,6 +979,18 @@
   </main>
   <script type="module">
     import { getReadmeLocationPresentation, getSuspectStatusPresentation, normalizeAnalysisForView, parseReports, requiredColumns } from "/analysis-view-model.js";
+    import {
+      createFixPlan,
+      fixPlanAssigneeStorageKey,
+      fixPlanStorageKey,
+      formatFixPlanDueDate,
+      getFixPlanDeadline,
+      getFixPlanExportRecords,
+      getQuickFixPlanDates,
+      normalizeFixPlans,
+      toLocalIsoDate,
+      validateFixPlanInput,
+    } from "/fix-plan-model.js";
     const reportInput = document.getElementById("report-file");
     const chooseFileButton = document.getElementById("choose-report-file");
     const loadSampleButton = document.getElementById("load-sample");
@@ -944,6 +1008,7 @@
     const analysisResults = document.getElementById("analysis-results");
     const analysisTempWarning = document.getElementById("analysis-temp-warning");
     const analysisFailure = document.getElementById("analysis-output-error");
+    const analysisOutputOrder = document.getElementById("analysis-output-order");
     const bugCount = document.getElementById("bug-count");
     const emptyState = document.getElementById("empty-state");
     const readmeInput = document.getElementById("readme-file");
@@ -985,9 +1050,20 @@
     window.bugPinSuspectNodes = new Map();
     window.bugPinLocationStates = new Map();
     window.bugPinGitHubConnection = null;
+    const fixPlansByBugId = new Map();
+    try {
+      const storedPlans = JSON.parse(localStorage.getItem(fixPlanStorageKey) || "[]");
+      for (const plan of normalizeFixPlans(storedPlans)) fixPlansByBugId.set(plan.bug_id, plan);
+    } catch {
+      // 손상된 브라우저 저장 값은 읽기만 건너뛰고 새 계획을 다시 저장할 수 있습니다.
+    }
+    window.bugPinFixPlans = fixPlansByBugId;
     let githubFileRequestVersion = 0;
     let highlightedSummaryTarget = null;
     let summaryHighlightTimer = null;
+    let bugSortMode = "default";
+    let bugDefaultOrder = [];
+    let fixPlanExportButton = null;
 
     function clearAnalysis() {
       window.bugPinAnalysis = null;
@@ -1007,6 +1083,334 @@
       delete analysisStatus.dataset.kind;
       bugCount.textContent = "0 BUGS";
       emptyState.hidden = false;
+    }
+
+    function persistFixPlans() {
+      try {
+        localStorage.setItem(fixPlanStorageKey, JSON.stringify([...fixPlansByBugId.values()]));
+      } catch {
+        // 저장 공간이 차거나 비활성화된 경우 현재 화면의 계획은 그대로 유지합니다.
+      }
+      if (fixPlanExportButton) fixPlanExportButton.disabled = fixPlansByBugId.size === 0;
+    }
+
+    function saveFixPlan(plan) {
+      fixPlansByBugId.set(plan.bug_id, plan);
+      window.bugPinFixPlans = fixPlansByBugId;
+      persistFixPlans();
+      const state = window.bugPinLocationStates.get(plan.bug_id);
+      if (state) state.plan = plan;
+    }
+
+    function getAssigneeSuggestions() {
+      let names = [];
+      try {
+        const saved = JSON.parse(localStorage.getItem(fixPlanAssigneeStorageKey) || "[]");
+        if (Array.isArray(saved)) names = saved.filter((name) => typeof name === "string" && name.trim());
+      } catch {
+        names = [];
+      }
+      for (const plan of fixPlansByBugId.values()) names.push(plan.assignee);
+      return [...new Map(names.map((name) => [name.trim().toLocaleLowerCase(), name.trim()])).values()];
+    }
+
+    function rememberAssigneeName(name) {
+      const normalized = name.trim();
+      if (!normalized) return;
+      const names = getAssigneeSuggestions().filter((saved) => saved.toLocaleLowerCase() !== normalized.toLocaleLowerCase());
+      names.unshift(normalized);
+      try {
+        localStorage.setItem(fixPlanAssigneeStorageKey, JSON.stringify(names.slice(0, 30)));
+      } catch {
+        // 제안 목록 저장 실패는 계획 입력을 막지 않습니다.
+      }
+    }
+
+    function fixPlanPriorityLabel(priority) {
+      return ({ high: "높음", medium: "보통", low: "낮음" })[priority] || "보통";
+    }
+
+    function updateFixPlanBadge(bugId, state) {
+      const nodes = window.bugPinSuspectNodes.get(bugId);
+      const plan = state.plan || fixPlansByBugId.get(bugId);
+      if (!nodes?.planBadge) return;
+      state.plan = plan || null;
+      if (!plan) {
+        nodes.planBadge.hidden = true;
+        nodes.planBadge.textContent = "";
+        delete nodes.planBadge.dataset.urgency;
+        return;
+      }
+      const deadline = getFixPlanDeadline(plan.due_date);
+      nodes.planBadge.hidden = false;
+      nodes.planBadge.dataset.urgency = plan.status === "on_hold" ? "on_hold" : deadline.kind;
+      nodes.planBadge.textContent = `${plan.status === "on_hold" ? "보류 · " : ""}담당 ${plan.assignee} · ${deadline.label}`;
+    }
+
+    function activatePlanForConfirmedLocation(bugId, state) {
+      const plan = state.plan || fixPlansByBugId.get(bugId) || null;
+      state.plan = plan;
+      state.planEditing = !plan;
+      if (plan?.status === "on_hold") {
+        const resumed = { ...plan, status: "planned", updated_at: new Date().toISOString() };
+        saveFixPlan(resumed);
+        state.plan = resumed;
+      }
+      if (plan && !state.planDraft) {
+        state.planDraft = { assignee: plan.assignee, due_date: plan.due_date, priority: plan.priority, memo: plan.memo };
+      }
+    }
+
+    function holdPlanForReselection(bugId, state) {
+      const plan = state.plan || fixPlansByBugId.get(bugId);
+      if (!plan) return;
+      const held = { ...plan, status: "on_hold", updated_at: new Date().toISOString() };
+      saveFixPlan(held);
+      state.plan = held;
+      state.planEditing = false;
+    }
+
+    function renderPlanSummary(bugId, state, plan, held = false) {
+      const section = document.createElement("section");
+      section.className = "fix-plan-summary";
+      section.dataset.status = held ? "on_hold" : plan.status;
+      const deadline = getFixPlanDeadline(plan.due_date);
+      const line = document.createElement("p");
+      line.className = "fix-plan-summary-line";
+      line.textContent = `${held ? "보류 · " : ""}담당 ${plan.assignee} · ${deadline.dateLabel}까지 · 우선순위 ${fixPlanPriorityLabel(plan.priority)}`;
+      const meta = document.createElement("div");
+      meta.className = "fix-plan-summary-meta";
+      const location = document.createElement("span");
+      location.textContent = `${deadline.label} · ${plan.location.file || "파일 미특정"}${plan.location.lines ? ` ${plan.location.lines}` : ""}`;
+      meta.append(location);
+      section.append(line, meta);
+      if (plan.memo) {
+        const memo = document.createElement("p");
+        memo.className = "fix-plan-summary-memo";
+        memo.textContent = plan.memo;
+        section.append(memo);
+      }
+      if (held) {
+        const label = document.createElement("span");
+        label.className = "fix-plan-status-label";
+        label.textContent = "위치 재선택 중 · 계획 보류";
+        section.append(label);
+      } else {
+        const edit = document.createElement("button");
+        edit.className = "fix-plan-edit";
+        edit.type = "button";
+        edit.textContent = "수정";
+        edit.addEventListener("click", () => {
+          state.planEditing = true;
+          state.planDraft = { assignee: plan.assignee, due_date: plan.due_date, priority: plan.priority, memo: plan.memo };
+          renderLocationState(bugId);
+          window.bugPinSuspectNodes.get(bugId)?.content.querySelector(".fix-plan-assignee")?.focus();
+        });
+        section.append(edit);
+      }
+      return section;
+    }
+
+    function renderPlanEditor(bugId, state, plan, candidates) {
+      const section = document.createElement("section");
+      section.className = "fix-plan-card";
+      const heading = document.createElement("h6");
+      heading.className = "fix-plan-heading";
+      heading.textContent = "수정 계획";
+      const required = document.createElement("span");
+      required.className = "fix-plan-required";
+      required.textContent = "담당자·마감일 필수";
+      heading.append(required);
+      const draft = state.planDraft || { assignee: plan?.assignee || "", due_date: plan?.due_date || "", priority: plan?.priority || "medium", memo: plan?.memo || "" };
+      state.planDraft = draft;
+
+      let datalist = document.getElementById("bugpin-fix-assignee-suggestions");
+      if (!datalist) {
+        datalist = document.createElement("datalist");
+        datalist.id = "bugpin-fix-assignee-suggestions";
+        document.body.append(datalist);
+      }
+      datalist.replaceChildren(...getAssigneeSuggestions().map((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        return option;
+      }));
+
+      const form = document.createElement("form");
+      form.className = "fix-plan-fields";
+      form.noValidate = true;
+      const assigneeField = document.createElement("div");
+      assigneeField.className = "fix-plan-field";
+      const assigneeLabel = document.createElement("label");
+      assigneeLabel.className = "fix-plan-label";
+      assigneeLabel.textContent = "담당자 *";
+      const assignee = document.createElement("input");
+      assignee.className = "fix-plan-input fix-plan-assignee";
+      assignee.type = "text";
+      assignee.maxLength = 80;
+      assignee.placeholder = "담당자 이름";
+      assignee.setAttribute("list", datalist.id);
+      assignee.autocomplete = "off";
+      assignee.required = true;
+      assignee.value = draft.assignee;
+      const assigneeError = document.createElement("span");
+      assigneeError.className = "fix-plan-error";
+      assigneeError.dataset.planError = "assignee";
+      assigneeError.hidden = true;
+      assigneeField.append(assigneeLabel, assignee, assigneeError);
+
+      const dueField = document.createElement("div");
+      dueField.className = "fix-plan-field";
+      const dueLabel = document.createElement("label");
+      dueLabel.className = "fix-plan-label";
+      dueLabel.textContent = "마감일 *";
+      const dueDate = document.createElement("input");
+      dueDate.className = "fix-plan-date";
+      dueDate.type = "date";
+      dueDate.min = toLocalIsoDate();
+      dueDate.required = true;
+      dueDate.value = draft.due_date;
+      const dueError = document.createElement("span");
+      dueError.className = "fix-plan-error";
+      dueError.dataset.planError = "due_date";
+      dueError.hidden = true;
+      const quickDates = document.createElement("div");
+      quickDates.className = "fix-plan-quick-dates";
+      const dates = getQuickFixPlanDates();
+      for (const [label, key] of [["오늘", "today"], ["내일", "tomorrow"], ["이번 주 금요일", "friday"], ["다음 주", "nextWeek"]]) {
+        const button = document.createElement("button");
+        button.className = "fix-plan-quick-date";
+        button.type = "button";
+        button.textContent = label;
+        button.addEventListener("click", () => {
+          dueDate.value = dates[key];
+          dueDate.dispatchEvent(new Event("input", { bubbles: true }));
+          dueDate.focus();
+        });
+        quickDates.append(button);
+      }
+      dueField.append(dueLabel, dueDate, quickDates, dueError);
+
+      const priorityField = document.createElement("fieldset");
+      priorityField.className = "fix-plan-field full";
+      const priorityLegend = document.createElement("legend");
+      priorityLegend.className = "fix-plan-label";
+      priorityLegend.textContent = "우선순위 · 선택";
+      const priorityButtons = document.createElement("div");
+      priorityButtons.className = "fix-plan-priorities";
+      for (const [key, label] of [["high", "높음"], ["medium", "보통"], ["low", "낮음"]]) {
+        const button = document.createElement("button");
+        button.className = "fix-plan-priority";
+        button.type = "button";
+        button.dataset.priority = key;
+        button.setAttribute("aria-pressed", String(draft.priority === key));
+        button.textContent = label;
+        button.addEventListener("click", () => {
+          draft.priority = key;
+          priorityButtons.querySelectorAll(".fix-plan-priority").forEach((option) => option.setAttribute("aria-pressed", String(option === button)));
+        });
+        priorityButtons.append(button);
+      }
+      priorityField.append(priorityLegend, priorityButtons);
+
+      const memoField = document.createElement("label");
+      memoField.className = "fix-plan-field full";
+      const memoLabel = document.createElement("span");
+      memoLabel.className = "fix-plan-label";
+      memoLabel.textContent = "메모 · 선택";
+      const memo = document.createElement("textarea");
+      memo.className = "fix-plan-memo";
+      memo.maxLength = 3000;
+      memo.placeholder = "예: OnCollisionStay2D에 피격 쿨타임 추가";
+      memo.value = draft.memo;
+      memoField.append(memoLabel, memo);
+
+      const preview = document.createElement("p");
+      preview.className = "fix-plan-preview";
+      preview.setAttribute("aria-live", "polite");
+      const refreshPreview = () => {
+        draft.assignee = assignee.value;
+        draft.due_date = dueDate.value;
+        draft.memo = memo.value;
+        preview.textContent = `${draft.assignee.trim() || "담당자"}가 ${draft.due_date ? `${formatFixPlanDueDate(draft.due_date)}까지` : "마감일까지"} 고쳐야 합니다`;
+      };
+      assignee.addEventListener("input", () => {
+        draft.assignee = assignee.value;
+        rememberAssigneeName(assignee.value);
+        refreshPreview();
+      });
+      dueDate.addEventListener("input", refreshPreview);
+      memo.addEventListener("input", refreshPreview);
+      refreshPreview();
+
+      const actions = document.createElement("div");
+      actions.className = "fix-plan-buttons fix-plan-field full";
+      if (plan) {
+        const cancel = document.createElement("button");
+        cancel.className = "fix-plan-cancel";
+        cancel.type = "button";
+        cancel.textContent = "취소";
+        cancel.addEventListener("click", () => {
+          state.planEditing = false;
+          state.planDraft = null;
+          renderLocationState(bugId);
+        });
+        actions.append(cancel);
+      }
+      const save = document.createElement("button");
+      save.className = "fix-plan-save";
+      save.type = "submit";
+      save.textContent = "계획 저장";
+      actions.append(save);
+
+      form.append(assigneeField, dueField, priorityField, memoField, preview, actions);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        draft.assignee = assignee.value;
+        draft.due_date = dueDate.value;
+        draft.memo = memo.value;
+        const errors = validateFixPlanInput(draft);
+        assigneeError.textContent = errors.assignee;
+        assigneeError.hidden = !errors.assignee;
+        dueError.textContent = errors.due_date;
+        dueError.hidden = !errors.due_date;
+        assignee.setAttribute("aria-invalid", String(Boolean(errors.assignee)));
+        dueDate.setAttribute("aria-invalid", String(Boolean(errors.due_date)));
+        if (errors.assignee || errors.due_date) {
+          (errors.assignee ? assignee : dueDate).focus();
+          return;
+        }
+        const result = createFixPlan({
+          bug: window.bugPinAnalysis.bugs.find((item) => item.bug_id === bugId),
+          candidates,
+          assignee: draft.assignee,
+          due_date: draft.due_date,
+          priority: draft.priority,
+          memo: draft.memo,
+          previous: plan,
+        });
+        if (!result.plan) return;
+        saveFixPlan(result.plan);
+        state.plan = result.plan;
+        state.planDraft = null;
+        state.planEditing = false;
+        renderLocationState(bugId);
+        applyBugSort(bugSortMode);
+      });
+      section.append(heading, form);
+      return section;
+    }
+
+    function renderFixPlanSection(bugId, state, confirmedCandidates) {
+      const plan = state.plan || fixPlansByBugId.get(bugId) || null;
+      state.plan = plan;
+      if (state.confirmed) {
+        return plan && !state.planEditing
+          ? renderPlanSummary(bugId, state, plan, false)
+          : renderPlanEditor(bugId, state, plan, confirmedCandidates);
+      }
+      if (plan?.status === "on_hold") return renderPlanSummary(bugId, state, plan, true);
+      return null;
     }
 
     function setPanelSummaryPlaceholder(message) {
@@ -1048,6 +1452,7 @@
         button.className = "panel-summary-row";
         button.type = "button";
         button.dataset.kind = entry.kind;
+        if (entry.kind === "bug") button.dataset.bugId = entry.bugId;
         button.setAttribute("aria-label", entry.kind === "bug"
           ? `${entry.number}. ${entry.title}, 제보 ${entry.count}건으로 이동`
           : `${entry.title} ${entry.count}건으로 이동`);
@@ -1072,6 +1477,69 @@
         fragment.append(button);
       });
       panelSummaryList.replaceChildren(fragment);
+    }
+
+    function compareBugPlans(firstId, secondId, mode) {
+      const firstPlan = fixPlansByBugId.get(firstId);
+      const secondPlan = fixPlansByBugId.get(secondId);
+      const defaultDifference = bugDefaultOrder.indexOf(firstId) - bugDefaultOrder.indexOf(secondId);
+      if (mode === "due") {
+        if (Boolean(firstPlan) !== Boolean(secondPlan)) return firstPlan ? -1 : 1;
+        if (!firstPlan) return defaultDifference;
+        return firstPlan.due_date.localeCompare(secondPlan.due_date) || defaultDifference;
+      }
+      if (mode === "priority") {
+        if (Boolean(firstPlan) !== Boolean(secondPlan)) return firstPlan ? -1 : 1;
+        if (!firstPlan) return defaultDifference;
+        const rank = { high: 0, medium: 1, low: 2 };
+        return rank[firstPlan.priority] - rank[secondPlan.priority] || firstPlan.due_date.localeCompare(secondPlan.due_date) || defaultDifference;
+      }
+      return defaultDifference;
+    }
+
+    function applyBugSort(mode = bugSortMode) {
+      bugSortMode = ["due", "priority", "default"].includes(mode) ? mode : "default";
+      const bugCardList = document.querySelector(".bug-card-list");
+      const modeLabels = { default: "제보 많은 순", due: "마감일 순", priority: "우선순위 순" };
+      if (analysisOutputOrder) analysisOutputOrder.textContent = `버그 묶음 · ${modeLabels[bugSortMode]}`;
+
+      document.querySelectorAll(".bug-sort-button").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.sortMode === bugSortMode));
+      });
+
+      if (!bugCardList) return;
+      const sortedIds = [...bugDefaultOrder].sort((first, second) => compareBugPlans(first, second, bugSortMode));
+      const cardById = new Map([...bugCardList.querySelectorAll(".bug-card")].map((card) => [card.dataset.bugId, card]));
+      sortedIds.forEach((bugId, index) => {
+        const card = cardById.get(bugId);
+        if (!card) return;
+        const rank = card.querySelector(".bug-rank");
+        if (rank) rank.textContent = String(index + 1);
+        bugCardList.append(card);
+      });
+
+      const summaryRows = new Map([...panelSummaryList.querySelectorAll('.panel-summary-row[data-kind="bug"]')]
+        .map((row) => [row.dataset.bugId, row]));
+      const divider = panelSummaryList.querySelector(".panel-summary-divider");
+      sortedIds.forEach((bugId, index) => {
+        const row = summaryRows.get(bugId);
+        if (!row) return;
+        const number = row.querySelector(".panel-summary-number");
+        if (number) number.textContent = String(index + 1);
+        panelSummaryList.insertBefore(row, divider);
+      });
+    }
+
+    function exportFixPlans() {
+      const plans = getFixPlanExportRecords([...fixPlansByBugId.values()]);
+      const orderedPlans = plans.sort((first, second) => bugDefaultOrder.indexOf(first.bug_id) - bugDefaultOrder.indexOf(second.bug_id));
+      const blob = new Blob([`${JSON.stringify(orderedPlans, null, 2)}\n`], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "bugpin-fix-plans.json";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function clearLoadedReports() {
@@ -1397,6 +1865,9 @@
         confirmed: false,
         confirmedCandidateIds: [],
         confirmedLocation: null,
+        plan: null,
+        planEditing: false,
+        planDraft: null,
         feedbackDrafts: new Map(),
         feedbackOpenFor: null,
         searching: false,
@@ -1601,6 +2072,7 @@
         state.confirmedCandidateIds = [candidate.candidateId];
         state.selectedCandidateIds = [candidate.candidateId];
         state.confirmedLocation = { ...candidate };
+        activatePlanForConfirmedLocation(bugId, state);
         state.feedbackOpenFor = null;
         state.searchMessage = "";
         renderLocationState(bugId);
@@ -1711,6 +2183,7 @@
       nodes.locationBadge.hidden = !state.confirmed || confirmedCandidates.length === 0;
       nodes.locationBadge.textContent = nodes.locationBadge.hidden ? "" : confirmedSummaryText(confirmedCandidates);
       nodes.card.dataset.locationConfirmed = String(!nodes.locationBadge.hidden);
+      updateFixPlanBadge(bugId, state);
     }
 
     function renderCandidateContent(candidate, index, labelOverride = "") {
@@ -1727,6 +2200,7 @@
       state.confirmedCandidateIds = chosen;
       state.confirmed = true;
       state.confirmedLocation = state.candidates.find((candidate) => candidate.candidateId === chosen[0]) || null;
+      activatePlanForConfirmedLocation(bugId, state);
       state.feedbackOpenFor = null;
       state.searchMessage = "";
       renderLocationState(bugId);
@@ -1760,6 +2234,7 @@
       reselect.addEventListener("click", () => {
         state.confirmed = false;
         state.confirmedLocation = null;
+        holdPlanForReselection(bugId, state);
         state.selectedCandidateIds = [...state.confirmedCandidateIds];
         state.confirmedCandidateIds = [];
         state.multiSelect = state.selectedCandidateIds.length > 1;
@@ -1835,6 +2310,7 @@
       const nodes = window.bugPinSuspectNodes.get(bugId);
       const state = window.bugPinLocationStates.get(bugId);
       if (!nodes || !state) return;
+      state.plan = state.plan || fixPlansByBugId.get(bugId) || null;
       const status = locationStatusFor(state);
       nodes.confidence.textContent = status.label;
       nodes.confidence.dataset.status = status.kind;
@@ -1851,6 +2327,8 @@
       if (state.confirmed) {
         const confirmed = renderConfirmedLocations(bugId, state, orderedCandidates);
         nodes.content.append(confirmed.section);
+        const fixPlan = renderFixPlanSection(bugId, state, confirmedCandidatesForState(state));
+        if (fixPlan) nodes.content.append(fixPlan);
         if (confirmed.others.length > 0) {
           const details = document.createElement("details");
           details.className = "suspect-other-candidates";
@@ -1892,6 +2370,10 @@
       const excluded = renderExcludedLocations(bugId, state);
       if (excluded) nodes.content.append(excluded);
 
+      if (!state.confirmed && state.plan?.status === "on_hold") {
+        nodes.content.append(renderFixPlanSection(bugId, state, []));
+      }
+
       if (state.reviewedFiles?.length > 0) {
         const reviewed = document.createElement("p");
         reviewed.className = "suspect-related-files";
@@ -1915,6 +2397,12 @@
         nodes.content.append(confirmedNote);
       }
       updateBugCardLocationBadge(bugId, state);
+    }
+
+    function confirmedCandidatesForState(state) {
+      return state.confirmedCandidateIds
+        .map((candidateId) => state.candidates.find((candidate) => candidate.candidateId === candidateId))
+        .filter(Boolean);
     }
 
     async function rerunLocationCandidate(bugId, candidateId, feedback, options = {}) {
@@ -2149,6 +2637,8 @@
       window.bugPinLocations = null;
       const reportMap = new Map(window.bugPinReports.map((report) => [report.report_id, report]));
       const { bugs, not_bugs: notBugs, unclear } = normalizeAnalysisForView(result, window.bugPinReports);
+      bugDefaultOrder = bugs.map((bug) => bug.bug_id);
+      bugSortMode = "default";
       const summaryFragment = document.createDocumentFragment();
       const summaries = [
         { kind: "bugs", label: "발견한 버그", count: bugs.length, note: "제보 수 많은 순으로 정렬" },
@@ -2195,6 +2685,29 @@
       bugsHeading.append(bugsTitle, bugsMeta);
       bugsGroup.append(bugsHeading);
 
+      const toolbar = document.createElement("div");
+      toolbar.className = "bug-list-toolbar";
+      const sortControls = document.createElement("div");
+      sortControls.className = "bug-sort-controls";
+      for (const [mode, label] of [["due", "마감일 순"], ["priority", "우선순위 순"], ["default", "기본"]]) {
+        const button = document.createElement("button");
+        button.className = "bug-sort-button";
+        button.type = "button";
+        button.dataset.sortMode = mode;
+        button.setAttribute("aria-pressed", String(mode === bugSortMode));
+        button.textContent = label;
+        button.addEventListener("click", () => applyBugSort(mode));
+        sortControls.append(button);
+      }
+      fixPlanExportButton = document.createElement("button");
+      fixPlanExportButton.className = "fix-plan-export";
+      fixPlanExportButton.type = "button";
+      fixPlanExportButton.textContent = "수정 계획 JSON 내보내기";
+      fixPlanExportButton.disabled = fixPlansByBugId.size === 0;
+      fixPlanExportButton.addEventListener("click", exportFixPlans);
+      toolbar.append(sortControls, fixPlanExportButton);
+      bugsGroup.append(toolbar);
+
       if (bugs.length === 0) {
         const empty = document.createElement("p");
         empty.className = "analysis-group-empty";
@@ -2207,6 +2720,8 @@
         bugs.forEach((bug, bugIndex) => {
           const card = document.createElement("details");
           card.className = "bug-card";
+          card.dataset.bugId = bug.bug_id;
+          card.dataset.defaultIndex = String(bugIndex);
           const summary = document.createElement("summary");
           const top = document.createElement("div");
           top.className = "bug-card-top";
@@ -2223,7 +2738,10 @@
           const locationBadge = document.createElement("span");
           locationBadge.className = "bug-card-location-badge";
           locationBadge.hidden = true;
-          titleWrap.append(title, locationBadge);
+          const planBadge = document.createElement("span");
+          planBadge.className = "bug-card-plan-badge";
+          planBadge.hidden = true;
+          titleWrap.append(title, locationBadge, planBadge);
           topLeft.append(rank, titleWrap);
           const count = document.createElement("span");
           count.className = "bug-card-count";
@@ -2291,13 +2809,16 @@
               : "README를 올리거나 GitHub 저장소를 연결한 뒤 의심 위치를 확인할 수 있습니다.";
           suspectContent.append(suspectEmpty);
           suspectArea.append(suspectHeader, suspectContent);
-          window.bugPinSuspectNodes.set(bug.bug_id, { bugId: bug.bug_id, confidence, content: suspectContent, locationBadge, card });
+          window.bugPinSuspectNodes.set(bug.bug_id, { bugId: bug.bug_id, confidence, content: suspectContent, locationBadge, planBadge, card });
+          initialLocationState.plan = fixPlansByBugId.get(bug.bug_id) || null;
           window.bugPinLocationStates.set(bug.bug_id, initialLocationState);
+          updateFixPlanBadge(bug.bug_id, initialLocationState);
           detail.append(suspectArea);
           card.append(summary, detail);
           bugCardList.append(card);
           panelSummaryEntries.push({
             kind: "bug",
+            bugId: bug.bug_id,
             number: bugIndex + 1,
             title: bug.title,
             count: bug.report_ids.length,
@@ -2355,6 +2876,7 @@
           : "의심 위치 찾기";
       analysisResults.replaceChildren(resultsFragment);
       renderPanelSummary(panelSummaryEntries);
+      applyBugSort("default");
       analysisOutput.hidden = false;
       bugCount.textContent = `${bugs.length} BUGS`;
       emptyState.hidden = true;
