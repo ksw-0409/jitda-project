@@ -71,6 +71,115 @@ function readJsonBody(request) {
   });
 }
 
+function notionReadmeRouteIsEnabled() {
+  return process.env.NOTION_README_PRIVATE_DEPLOYMENT?.trim().toLowerCase() === "true";
+}
+
+function validNotionPageId(value) {
+  return typeof value === "string" && /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(value);
+}
+
+function getNotionMarkdownEndpoint(pageId) {
+  const testOverride = process.env.NODE_ENV === "test" ? process.env.NOTION_API_BASE_URL?.trim() : "";
+  const base = testOverride || "https://api.notion.com";
+  let url;
+  try {
+    url = new URL(base);
+  } catch {
+    throw new HttpError(500, "Notion API 주소 설정이 올바르지 않습니다.");
+  }
+  if (testOverride) {
+    const testLoopback = process.env.NODE_ENV === "test" && ["127.0.0.1", "localhost", "::1"].includes(url.hostname);
+    if (!testLoopback || !["http:", "https:"].includes(url.protocol)) {
+      throw new HttpError(500, "테스트용 Notion API 주소가 올바르지 않습니다.");
+    }
+  } else if (url.origin !== "https://api.notion.com") {
+    throw new HttpError(500, "Notion API 주소 설정이 올바르지 않습니다.");
+  }
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/v1/pages/${encodeURIComponent(pageId)}/markdown`;
+  url.search = "";
+  url.hash = "";
+  return url;
+}
+
+async function fetchNotionReadmeMarkdown() {
+  if (!notionReadmeRouteIsEnabled()) {
+    throw new HttpError(404, "Notion README는 팀 접근 제한이 적용된 전용 환경에서만 사용할 수 있습니다.");
+  }
+
+  const token = process.env.NOTION_TOKEN?.trim();
+  const pageId = process.env.NOTION_PAGE_ID?.trim();
+  if (!token) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
+  if (!pageId || !validNotionPageId(pageId)) {
+    throw new HttpError(503, "서버에 올바른 NOTION_PAGE_ID 환경 변수를 설정해 주세요.");
+  }
+
+  const endpoint = getNotionMarkdownEndpoint(pageId);
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Notion-Version": "2026-03-11",
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new HttpError(502, "Notion API에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  let responseText;
+  try {
+    responseText = await response.text();
+  } catch {
+    throw new HttpError(502, "Notion 응답을 읽지 못했습니다.");
+  }
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new HttpError(401, "Notion 인증에 실패했습니다. NOTION_TOKEN을 확인해 주세요.");
+    }
+    if (response.status === 403) {
+      throw new HttpError(403, "Notion 페이지 접근 권한이 없습니다. 해당 페이지를 연결(Share)에서 integration과 공유해 주세요.");
+    }
+    if (response.status === 404) {
+      throw new HttpError(404, "Notion 페이지를 찾지 못했습니다. 페이지 ID와 integration 공유 설정을 확인해 주세요.");
+    }
+    if (response.status === 429) {
+      throw new HttpError(429, "Notion API 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+    if (response.status >= 500) {
+      throw new HttpError(502, `Notion 서비스에 일시적인 오류가 있습니다 (HTTP ${response.status}).`);
+    }
+    throw new HttpError(502, `Notion API 요청이 거부되었습니다 (HTTP ${response.status}).`);
+  }
+
+  let markdown = "";
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("json")) {
+    let payload;
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      throw new HttpError(502, "Notion 응답 JSON을 해석할 수 없습니다.");
+    }
+    if (typeof payload?.markdown === "string") markdown = payload.markdown;
+  } else if (contentType.includes("markdown") || contentType.startsWith("text/")) {
+    markdown = responseText;
+  }
+
+  if (!markdown.trim()) {
+    throw new HttpError(422, "Notion 페이지에 Markdown 본문이 비어 있습니다. 페이지 블록에 README 내용을 작성해 주세요.");
+  }
+  if (markdown.length > 50_000) {
+    throw new HttpError(413, "Notion README가 너무 큽니다. 50,000자 이하로 정리해 주세요.");
+  }
+
+  return { markdown };
+}
+
 function parseGithubRepositoryUrl(value) {
   if (typeof value !== "string" || !value.trim()) {
     throw new HttpError(400, "GitHub 저장소 주소를 입력해 주세요.");
@@ -1498,6 +1607,14 @@ const server = createServer(async (request, response) => {
       }
       const bugs = normalizeBugs(body.bugs);
       sendJson(response, 200, await analyzeGithubCode(body.connectionId, bugs));
+      return;
+    }
+    if (pathname === "/api/notion/readme") {
+      if (request.method !== "GET") {
+        sendJson(response, 405, { error: "GET 요청만 사용할 수 있습니다." });
+        return;
+      }
+      sendJson(response, 200, await fetchNotionReadmeMarkdown());
       return;
     }
     if (pathname === "/api/analyze") {

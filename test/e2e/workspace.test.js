@@ -32,7 +32,7 @@ async function waitFor(predicate, description, timeoutMs = 12_000) {
 }
 
 before(async () => {
-  environment = await startBugPinTestEnvironment();
+  environment = await startBugPinTestEnvironment({ notionPrivate: true });
   browserSession = `bugpin-e2e-${process.pid}`;
   browser("open", environment.app.url);
 });
@@ -50,6 +50,7 @@ after(async () => {
 
 test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태를 검증한다", async () => {
   const expectedReports = await loadSampleReports();
+  const notionMarkdown = "# Notion README Integration\n\n## Scripts\n- `PlayerMovement.cs` — Controls movement.\n- `PlayerHealth.cs` — Handles damage.\n\nNOTION_BODY_E2E_MARKER_42";
 
   const initial = evaluate(`({
     placeholder: document.querySelector("#panel-summary-list").textContent.trim(),
@@ -59,6 +60,57 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(initial.placeholder, "분석을 시작하면 버그 목록이 여기에 표시됩니다");
   assert.equal(initial.analysisHidden, true);
   assert.equal(initial.reportCount, 0);
+
+  environment.notion.setMarkdown(notionMarkdown);
+  environment.notion.setMode("delay");
+  browser("scrollintoview", "#load-notion-readme");
+  browser("click", "#load-notion-readme");
+  const notionLoading = evaluate(`({
+    disabled: document.querySelector("#load-notion-readme").disabled,
+    button: document.querySelector("#load-notion-readme").textContent,
+    statusKind: document.querySelector("#readme-feedback").dataset.kind,
+    status: document.querySelector("#readme-feedback").textContent
+  })`);
+  assert.equal(notionLoading.disabled, true);
+  assert.match(notionLoading.button, /불러오는 중/);
+  assert.equal(notionLoading.statusKind, "loading");
+  environment.notion.setMode("normal");
+  await waitFor(
+    "return { done: !document.querySelector('#load-notion-readme').disabled && document.querySelector('#readme-file-name').textContent === 'Notion README.md' }",
+    "Notion README 가져오기",
+  );
+  const notionLoaded = evaluate(`({
+    markdown: window.bugPinReadme,
+    status: document.querySelector("#readme-feedback").textContent,
+    ready: !document.querySelector("#readme-ready-indicator").hidden
+  })`);
+  assert.equal(notionLoaded.markdown, notionMarkdown);
+  assert.match(notionLoaded.status, /노션 README를 불러왔습니다/);
+  assert.equal(notionLoaded.ready, true);
+
+  environment.notion.setMode("permission-denied");
+  browser("click", "#load-notion-readme");
+  await waitFor(
+    "return { done: document.querySelector('#readme-feedback').dataset.kind === 'error' }",
+    "Notion 페이지 권한 오류 안내",
+  );
+  const afterPermissionError = evaluate(`({
+    markdown: window.bugPinReadme,
+    status: document.querySelector("#readme-feedback").textContent,
+    filename: document.querySelector("#readme-file-name").textContent
+  })`);
+  assert.equal(afterPermissionError.markdown, notionMarkdown);
+  assert.equal(afterPermissionError.filename, "Notion README.md");
+  assert.match(afterPermissionError.status, /페이지 접근 권한/);
+
+  environment.notion.setMode("empty");
+  browser("click", "#load-notion-readme");
+  await waitFor(
+    "return { done: document.querySelector('#readme-feedback').dataset.kind === 'error' && document.querySelector('#readme-feedback').textContent.includes('본문이 비어') }",
+    "빈 Notion 페이지 오류 안내",
+  );
+  assert.equal(evaluate("window.bugPinReadme"), notionMarkdown);
+  environment.notion.setMode("normal");
 
   browser("click", "#analyze-reports");
   assert.match(evaluate("document.querySelector('#analysis-status').textContent"), /먼저 제보 CSV/);
@@ -100,6 +152,20 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(analyzed.temporaryWarningHidden, true);
   assert.equal(analyzed.status, "AI 분석이 완료되었습니다.");
   assert.ok(analyzed.bugCards.every((card, index, cards) => index === 0 || cards[index - 1].count >= card.count));
+
+  browser("scrollintoview", "#load-notion-readme");
+  browser("click", "#load-notion-readme");
+  await waitFor(
+    "return { done: document.querySelector('#readme-feedback').textContent.includes('노션 README를 불러왔습니다') }",
+    "분석에 사용할 Notion README 가져오기",
+  );
+  browser("scrollintoview", "#locate-suspects");
+  browser("click", "#locate-suspects");
+  await waitFor("return { done: !document.querySelector('#locate-suspects').disabled }", "Notion 본문으로 기존 README 분석");
+  const notionLocateRequest = environment.mock.requests.at(-1);
+  const notionLocateUserContent = notionLocateRequest.messages.find((message) => message.role === "user")?.content || "";
+  assert.ok(notionLocateUserContent.includes(notionMarkdown));
+  assert.ok(notionLocateUserContent.includes("NOTION_BODY_E2E_MARKER_42"));
 
   browser("scrollintoview", "#analysis-results .bug-card:nth-of-type(1) > summary");
   browser("click", "#analysis-results .bug-card:nth-of-type(1) > summary");

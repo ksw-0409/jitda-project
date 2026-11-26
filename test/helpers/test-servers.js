@@ -231,7 +231,51 @@ async function waitForApp(baseUrl, child) {
   throw new Error(`BugPin 서버 준비 시간 초과: ${lastError?.message || "HTTP 응답이 없습니다."}`);
 }
 
-export async function startBugPinServer(mockUrl) {
+export async function startMockNotion() {
+  let mode = "normal";
+  let markdown = "# Notion README body\n\n- `PlayerMovement.cs` — Moves the player.\n\nThis is the full page body, not only its title.";
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const requestMode = mode;
+    requests.push({
+      method: request.method,
+      path: request.url,
+      authorization: request.headers.authorization,
+      notionVersion: request.headers["notion-version"],
+    });
+    if (mode === "permission-denied") {
+      response.writeHead(403, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ object: "error", code: "restricted_resource", message: "test page is not shared" }));
+      return;
+    }
+    if (mode === "unauthorized") {
+      response.writeHead(401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ object: "error", code: "unauthorized", message: "test token invalid" }));
+      return;
+    }
+    if (mode === "not-found") {
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ object: "error", code: "object_not_found", message: "test page missing" }));
+      return;
+    }
+    if (requestMode === "delay") await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+    const body = requestMode === "empty"
+      ? { markdown: "  \n  " }
+      : { markdown };
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(body));
+  });
+  const port = await listen(server);
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests,
+    setMode(nextMode) { mode = nextMode; },
+    setMarkdown(nextMarkdown) { markdown = nextMarkdown; },
+    close() { return new Promise((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose())); },
+  };
+}
+
+export async function startBugPinServer(mockUrl, options = {}) {
   const portServer = createServer();
   const port = await listen(portServer);
   await new Promise((resolveClose, rejectClose) => portServer.close((error) => error ? rejectClose(error) : resolveClose()));
@@ -241,9 +285,14 @@ export async function startBugPinServer(mockUrl) {
     env: {
       PATH: process.env.PATH || "/usr/bin:/bin",
       HOME: process.env.HOME || "/tmp",
+      NODE_ENV: "test",
       PORT: String(port),
       LLM_API_KEY: "bugpin-test-only-key",
       LLM_BASE_URL: mockUrl,
+      NOTION_README_PRIVATE_DEPLOYMENT: options.notionPrivate ? "true" : "",
+      NOTION_TOKEN: options.notionToken || "",
+      NOTION_PAGE_ID: options.notionPageId || "",
+      NOTION_API_BASE_URL: options.notionApiBaseUrl || "",
       NO_PROXY: "127.0.0.1,localhost",
       no_proxy: "127.0.0.1,localhost",
     },
@@ -273,20 +322,30 @@ export async function startBugPinServer(mockUrl) {
   };
 }
 
-export async function startBugPinTestEnvironment() {
+export async function startBugPinTestEnvironment(options = {}) {
   const mock = await startMockLlm();
+  let notion = null;
   try {
-    const app = await startBugPinServer(mock.url);
+    if (options.notionPrivate) notion = await startMockNotion();
+    const app = await startBugPinServer(mock.url, {
+      notionPrivate: options.notionPrivate,
+      notionToken: options.notionPrivate ? "notion-test-only-token" : "",
+      notionPageId: options.notionPrivate ? "11111111-2222-4333-8444-555555555555" : "",
+      notionApiBaseUrl: notion?.url,
+    });
     return {
       app,
       mock,
+      notion,
       async close() {
         await app.close();
         await mock.close();
+        if (notion) await notion.close();
       },
     };
   } catch (error) {
     await mock.close();
+    if (notion) await notion.close();
     throw error;
   }
 }

@@ -6,7 +6,9 @@ import {
   loadSampleReadme,
   loadSampleReports,
   postJson,
+  startBugPinServer,
   startBugPinTestEnvironment,
+  startMockNotion,
   viewModelFromAnalysis,
 } from "../helpers/test-servers.js";
 
@@ -14,14 +16,29 @@ let environment;
 let reports;
 let readme;
 let analysis;
+let notionMock;
+let notionPrivateApp;
+const notionTestToken = "notion-test-only-secret-value";
+const notionTestPageId = "11111111-2222-4333-8444-555555555555";
+const notionMarkdown = "# Full Notion README body\n\n## Scripts\n- `PlayerMovement.cs` — Controls player movement.\n\nNotion body marker: NOTION_FULL_BODY_7f29.";
 
 before(async () => {
   environment = await startBugPinTestEnvironment();
   reports = [...await loadSampleReports(), buildAmbiguousTestReport()];
   readme = await loadSampleReadme();
+  notionMock = await startMockNotion();
+  notionMock.setMarkdown(notionMarkdown);
+  notionPrivateApp = await startBugPinServer(environment.mock.url, {
+    notionPrivate: true,
+    notionToken: notionTestToken,
+    notionPageId: notionTestPageId,
+    notionApiBaseUrl: notionMock.url,
+  });
 });
 
 after(async () => {
+  await notionPrivateApp?.close();
+  await notionMock?.close();
   await environment?.close();
 });
 
@@ -135,6 +152,64 @@ test("요청 오류와 잘못된 LLM 응답은 HTTP 오류로 반환하고 두 �
   environment.mock.setMode("normal");
 });
 
+test("공개 환경에서는 Notion 본문 경로가 꺼져 있다", async () => {
+  const response = await fetch(`${environment.app.url}/api/notion/readme`);
+  const body = await response.json();
+  assert.equal(response.status, 404);
+  assert.match(body.error, /팀 접근 제한이 적용된 전용 환경/);
+});
+
+test("Notion Markdown 본문을 서버에서 읽고 기존 /api/locate 요청에 그대로 전달한다", async () => {
+  const response = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(result.markdown, notionMarkdown);
+  assert.match(result.markdown, /NOTION_FULL_BODY_7f29/);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(notionTestToken));
+
+  const notionRequest = notionMock.requests.at(-1);
+  assert.equal(notionRequest.method, "GET");
+  assert.equal(notionRequest.path, `/v1/pages/${notionTestPageId}/markdown`);
+  assert.equal(notionRequest.authorization, `Bearer ${notionTestToken}`);
+  assert.equal(notionRequest.notionVersion, "2026-03-11");
+
+  const { response: locateResponse, body: locateBody } = await postJson(notionPrivateApp.url, "/api/locate", {
+    bugs: [analysis.bugs[0]],
+    readme: result.markdown,
+  });
+  assert.equal(locateResponse.status, 200);
+  assert.equal(locateBody.results[0].bug_id, analysis.bugs[0].bug_id);
+  const locateLlmRequest = environment.mock.requests.at(-1);
+  const locatePrompt = locateLlmRequest.messages.find((message) => message.role === "user").content;
+  assert.ok(locatePrompt.includes(notionMarkdown));
+  assert.ok(locatePrompt.includes("NOTION_FULL_BODY_7f29"));
+  assert.doesNotMatch(locatePrompt, new RegExp(notionTestToken));
+});
+
+test("빈 Notion Markdown과 페이지 권한 오류는 구분해 안내한다", async () => {
+  notionMock.setMode("empty");
+  const emptyResponse = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const emptyBody = await emptyResponse.json();
+  assert.equal(emptyResponse.status, 422);
+  assert.match(emptyBody.error, /Markdown 본문이 비어 있습니다/);
+
+  notionMock.setMode("permission-denied");
+  const permissionResponse = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const permissionBody = await permissionResponse.json();
+  assert.equal(permissionResponse.status, 403);
+  assert.match(permissionBody.error, /페이지 접근 권한이 없습니다/);
+  assert.match(permissionBody.error, /integration과 공유/);
+  assert.doesNotMatch(JSON.stringify(permissionBody), new RegExp(notionTestToken));
+
+  notionMock.setMode("unauthorized");
+  const authResponse = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const authBody = await authResponse.json();
+  assert.equal(authResponse.status, 401);
+  assert.match(authBody.error, /NOTION_TOKEN/);
+  assert.doesNotMatch(JSON.stringify(authBody), new RegExp(notionTestToken));
+  notionMock.setMode("normal");
+});
+
 test("/api/locate-again에 버그 원문·README·제외 사유를 보내면 같은 후보를 걸러 다른 스크립트를 반환한다", async () => {
   const bug = analysis.bugs[0];
   const bugReports = reports.filter((report) => bug.report_ids.includes(report.report_id));
@@ -203,4 +278,62 @@ test("재탐색에서 후보 없음과 잘못된 피드백을 구분해 반환�
   assert.equal(invalidFeedback.response.status, 400);
   assert.match(invalidFeedback.body.error, /빠른 선택 항목이나 다른 위치 힌트/);
   environment.mock.setMode("normal");
+});
+
+test("공개 접근 제한이 없는 기본 서버에서는 Notion README 경로가 비활성화된다", async () => {
+  const response = await fetch(`${environment.app.url}/api/notion/readme`);
+  const body = await response.json();
+  assert.equal(response.status, 404);
+  assert.match(body.error, /팀 접근 제한이 적용된 전용 환경/);
+});
+
+test("GET /api/notion/readme가 실제 Markdown 본문을 읽고 기존 README 분석 경로에 전달한다", async () => {
+  const response = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.markdown, notionMarkdown);
+  assert.match(body.markdown, /NOTION_FULL_BODY_7f29/);
+  assert.doesNotMatch(JSON.stringify(body), new RegExp(notionTestToken));
+
+  const request = notionMock.requests.at(-1);
+  assert.equal(request.method, "GET");
+  assert.equal(request.path, `/v1/pages/${notionTestPageId}/markdown`);
+  assert.equal(request.authorization, `Bearer ${notionTestToken}`);
+  assert.equal(request.notionVersion, "2026-03-11");
+
+  const { response: locateResponse, body: locateBody } = await postJson(notionPrivateApp.url, "/api/locate", {
+    bugs: [analysis.bugs[0]],
+    readme: body.markdown,
+  });
+  assert.equal(locateResponse.status, 200);
+  assert.equal(locateBody.results[0].bug_id, analysis.bugs[0].bug_id);
+  const providerRequest = environment.mock.requests.at(-1);
+  const locatePrompt = providerRequest.messages.find((message) => message.role === "user")?.content || "";
+  assert.ok(locatePrompt.includes(notionMarkdown));
+  assert.ok(locatePrompt.includes("NOTION_FULL_BODY_7f29"));
+  assert.doesNotMatch(locatePrompt, new RegExp(notionTestToken));
+});
+
+test("빈 Notion 본문과 integration 권한 오류를 별도 HTTP 오류로 반환한다", async () => {
+  notionMock.setMode("empty");
+  const emptyResponse = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const emptyBody = await emptyResponse.json();
+  assert.equal(emptyResponse.status, 422);
+  assert.match(emptyBody.error, /Markdown 본문이 비어 있습니다/);
+
+  notionMock.setMode("permission-denied");
+  const permissionResponse = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const permissionBody = await permissionResponse.json();
+  assert.equal(permissionResponse.status, 403);
+  assert.match(permissionBody.error, /페이지 접근 권한이 없습니다/);
+  assert.match(permissionBody.error, /integration과 공유/);
+  assert.doesNotMatch(JSON.stringify(permissionBody), new RegExp(notionTestToken));
+
+  notionMock.setMode("unauthorized");
+  const authResponse = await fetch(`${notionPrivateApp.url}/api/notion/readme`);
+  const authBody = await authResponse.json();
+  assert.equal(authResponse.status, 401);
+  assert.match(authBody.error, /NOTION_TOKEN/);
+  assert.doesNotMatch(JSON.stringify(authBody), new RegExp(notionTestToken));
+  notionMock.setMode("normal");
 });

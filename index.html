@@ -907,6 +907,7 @@
               </div>
               <button class="readme-button" id="choose-readme" type="button">README 파일 선택</button>
               <button class="readme-sample-button" id="load-sample-readme" type="button">샘플 README 불러오기</button>
+              <button class="readme-sample-button" id="load-notion-readme" type="button">노션 README 불러오기</button>
               <a class="readme-download" href="sample_README.md" download>샘플 README 다운로드</a>
             </div>
             <section class="project-context-tabpanel" id="github-tab-panel" role="tabpanel" aria-labelledby="github-tab" tabindex="0" hidden>
@@ -1015,6 +1016,7 @@
     const readmeDropzone = document.getElementById("readme-dropzone");
     const chooseReadmeButton = document.getElementById("choose-readme");
     const loadSampleReadmeButton = document.getElementById("load-sample-readme");
+    const loadNotionReadmeButton = document.getElementById("load-notion-readme");
     const locateSuspectsButton = document.getElementById("locate-suspects");
     const readmeFileName = document.getElementById("readme-file-name");
     const readmeFileHint = document.getElementById("readme-file-hint");
@@ -2993,6 +2995,36 @@
       } finally {
         loadSampleReadmeButton.disabled = false;
         loadSampleReadmeButton.textContent = "샘플 README 불러오기";
+      }
+    });
+    loadNotionReadmeButton.addEventListener("click", async () => {
+      if (loadNotionReadmeButton.disabled) return;
+      loadNotionReadmeButton.disabled = true;
+      loadNotionReadmeButton.textContent = "노션 README 불러오는 중...";
+      setReadmeStatus("노션 페이지에서 Markdown 본문을 불러오는 중입니다...", "loading");
+      try {
+        const response = await fetch("/api/notion/readme", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+        let result;
+        try {
+          result = await response.json();
+        } catch {
+          throw new Error("노션 서버 응답을 읽을 수 없습니다.");
+        }
+        if (!response.ok) throw new Error(result.error || "노션 README를 불러오지 못했습니다.");
+        if (typeof result.markdown !== "string" || !result.markdown.trim()) {
+          throw new Error("노션 페이지의 Markdown 본문이 비어 있습니다.");
+        }
+        importReadme(result.markdown, "Notion README.md");
+        setReadmeStatus("노션 README를 불러왔습니다. 이제 ‘의심 위치 찾기’를 눌러 분석할 수 있습니다.", "success");
+      } catch (error) {
+        setReadmeStatus(error.message || "노션 README를 불러오지 못했습니다. 설정과 페이지 공유 권한을 확인해 주세요.", "error");
+      } finally {
+        loadNotionReadmeButton.disabled = false;
+        loadNotionReadmeButton.textContent = "노션 README 불러오기";
       }
     });
     readmeDropzone.addEventListener("dragover", (event) => {
