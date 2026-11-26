@@ -1,0 +1,2398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#203a31">
+<title>BugPin | 게임 QA 워크스페이스</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #202923;
+    --muted: #737b74;
+    --line: #e5e7e1;
+    --paper: #f4f5f1;
+    --panel: #ffffff;
+    --forest: #203a31;
+    --forest-soft: #eaf0e9;
+    --lime: #b7e779;
+    --coral: #e66d55;
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    min-width: 320px;
+    margin: 0;
+    background:
+      radial-gradient(circle at 8% 17%, rgba(224, 230, 217, .45), transparent 22rem),
+      var(--paper);
+    color: var(--ink);
+    font-family: Inter, Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button, a { font: inherit; }
+  button:focus-visible, a:focus-visible { outline: 3px solid #477d5d; outline-offset: 3px; }
+
+  .topbar {
+    min-height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 0 clamp(20px, 5vw, 76px);
+    background: var(--forest);
+    color: #fff;
+  }
+
+  .brand, .topbar-nav, .topbar-meta, .brand-lockup { display: flex; align-items: center; }
+  .brand { gap: 11px; color: inherit; text-decoration: none; }
+  .brand-mark { width: 38px; height: 38px; flex: 0 0 auto; }
+  .brand-lockup { align-items: baseline; gap: 8px; }
+  .brand-name { font-size: 20px; font-weight: 760; letter-spacing: -.055em; }
+  .brand-caption { color: #c3d0c7; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
+
+  .topbar-nav { gap: 27px; margin-left: auto; }
+  .topbar-nav a, .topbar-nav span {
+    color: #cbd6cf;
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .topbar-nav a[aria-current="page"] { color: #fff; }
+  .topbar-nav .nav-index { margin-left: 5px; color: var(--lime); font-size: 10px; }
+  .topbar-meta { gap: 9px; color: #d3ddd6; font-size: 12px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); }
+
+  main { width: min(1440px, 100%); margin: 0 auto; padding: 37px clamp(20px, 5vw, 76px) 40px; }
+
+  .breadcrumb {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    color: #858c84;
+    font-size: 10px;
+    font-weight: 720;
+    letter-spacing: .12em;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, .88fr);
+    align-items: center;
+    gap: clamp(24px, 5vw, 72px);
+    padding: 39px 0 36px;
+  }
+
+  .eyebrow, .panel-label, .empty-kicker {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    color: #69756b;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: .14em;
+  }
+
+  .eyebrow-number, .panel-number {
+    display: inline-grid;
+    width: 23px;
+    height: 23px;
+    place-items: center;
+    border: 1px solid #ccd4ca;
+    border-radius: 50%;
+    color: var(--forest);
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  h1 {
+    margin: 17px 0 13px;
+    font-size: clamp(37px, 4.4vw, 61px);
+    font-weight: 720;
+    letter-spacing: -.075em;
+    line-height: 1.12;
+  }
+  h1 span { color: #598265; }
+  .hero-description { max-width: 500px; margin: 0; color: #69736b; font-size: 15px; }
+
+  .hero-visual {
+    position: relative;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #dfe4dc;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, .56);
+  }
+  .hero-visual svg { display: block; width: 100%; height: auto; }
+  .visual-caption {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 8px 1px;
+    color: #778078;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .1em;
+  }
+  .visual-caption strong { color: var(--forest); font-weight: 760; }
+
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: minmax(250px, .74fr) minmax(560px, 1.65fr) minmax(270px, .82fr);
+    align-items: stretch;
+    gap: 15px;
+  }
+
+  .panel {
+    min-width: 0;
+    min-height: 376px;
+    overflow: hidden;
+    border: 1px solid #e4e7e0;
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 8px 28px rgba(39, 58, 44, .035);
+  }
+  .panel-inner { padding: 21px; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .panel-number { width: 22px; height: 22px; border-color: #e0e4dd; color: #657469; }
+  .panel-heading { margin: 17px 0 5px; font-size: 19px; font-weight: 710; letter-spacing: -.045em; }
+  .panel-description { min-height: 46px; margin: 0; color: var(--muted); font-size: 13px; }
+
+  .dropzone {
+    display: flex;
+    min-height: 162px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 18px;
+    padding: 15px;
+    border: 1px dashed #cdd8ce;
+    border-radius: 13px;
+    background: #f8faf7;
+    text-align: center;
+  }
+  .upload-icon { width: 34px; height: 34px; margin-bottom: 2px; color: #4d7859; }
+  .dropzone-title { margin: 0; font-size: 13px; font-weight: 690; }
+  .dropzone-note { margin: 0; color: #858e86; font-size: 11px; }
+  .button-primary {
+    min-height: 42px;
+    margin-top: 7px;
+    padding: 0 17px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--forest);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 680;
+  }
+  .button-primary:disabled { cursor: not-allowed; opacity: .72; }
+  .button-primary:not(:disabled) { cursor: pointer; transition: background 160ms ease, transform 120ms ease; }
+  .button-primary:not(:disabled):hover { background: #2d4d40; }
+  .button-primary:not(:disabled):active { transform: translateY(1px); }
+  .dropzone[data-dragging="true"] { border-color: #598265; background: #eef5ec; }
+  .upload-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px 12px; }
+  .button-sample, .sample-download {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: #52735a;
+    font-size: 11px;
+    font-weight: 680;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .button-sample:disabled { cursor: wait; opacity: .65; }
+  .upload-feedback {
+    margin: 12px 0 0;
+    padding: 9px 11px;
+    border: 1px solid #dce8d9;
+    border-radius: 8px;
+    background: #f3f8f1;
+    color: #355b3d;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .upload-feedback[data-kind="error"] { border-color: #f0d5cc; background: #fff6f2; color: #963f2f; }
+  .upload-feedback[hidden] { display: none; }
+  .required-fields { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .required-fields span {
+    padding: 4px 7px;
+    border: 1px solid #e6e9e3;
+    border-radius: 5px;
+    background: #fff;
+    color: #677168;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+  }
+  .field-note { margin: 9px 0 0; color: #858d86; font-size: 10px; }
+  .field-note .sample-download { min-height: 24px; padding: 0 2px; font-size: 10px; }
+
+  .report-preview {
+    margin-top: 15px;
+    overflow: hidden;
+    border: 1px solid #e4e7e0;
+    border-radius: var(--radius);
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(39, 58, 44, .035);
+  }
+  .report-preview[hidden] { display: none; }
+  .preview-inner { padding: 22px; }
+  .preview-header { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+  .preview-title { margin: 8px 0 0; font-size: 19px; font-weight: 710; letter-spacing: -.045em; }
+  .preview-count { flex: 0 0 auto; padding: 6px 10px; border-radius: 20px; background: var(--forest-soft); color: var(--forest); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 700; }
+  .table-wrap { overflow-x: auto; border: 1px solid #e9ece7; border-radius: 10px; }
+  .preview-table { width: 100%; border-collapse: collapse; text-align: left; }
+  .preview-table th, .preview-table td { min-width: 110px; padding: 10px 12px; border-bottom: 1px solid #edf0eb; vertical-align: top; font-size: 12px; }
+  .preview-table th { background: #f7f8f5; color: #657168; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 700; }
+  .preview-table th:first-child, .preview-table td:first-child { min-width: 80px; }
+  .preview-table td:last-child { min-width: 240px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .preview-table tbody tr:last-child td { border-bottom: 0; }
+  .preview-note { margin: 10px 2px 0; color: #788179; font-size: 11px; }
+
+  .bug-panel { display: flex; flex-direction: column; contain: size; }
+  .bug-panel .panel-inner { display: flex; height: 100%; min-height: 0; flex-direction: column; }
+  .count-badge {
+    padding: 5px 8px;
+    border-radius: 20px;
+    background: #f0f3ef;
+    color: #66746a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .empty-state {
+    display: flex;
+    min-height: 262px;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-top: 15px;
+    padding: 22px 18px;
+    border-top: 1px solid #eef0ec;
+    text-align: center;
+  }
+  .empty-illustration { width: 82px; height: 76px; margin-bottom: 10px; }
+  .empty-kicker { justify-content: center; color: #809083; font-size: 9px; }
+  .empty-title { margin: 7px 0 4px; font-size: 15px; font-weight: 710; letter-spacing: -.035em; }
+  .empty-copy { max-width: 260px; margin: 0; color: #7a837b; font-size: 12px; }
+  .empty-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    color: #718074;
+    font-size: 10px;
+    font-weight: 680;
+  }
+  .empty-step span { color: #b0b9b1; }
+  .empty-state[hidden], .analysis-status[hidden], .analysis-output[hidden] { display: none; }
+  .analyze-button {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 17px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--forest);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 160ms ease, transform 120ms ease;
+  }
+  .analyze-button:hover:not(:disabled) { background: #2d4d40; }
+  .analyze-button:active:not(:disabled) { transform: translateY(1px); }
+  .analyze-button:disabled { cursor: wait; opacity: .7; }
+  .panel-summary-list { display: grid; min-height: 0; flex: 1; align-content: start; gap: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; margin-top: 12px; padding: 7px; border: 1px solid #e3e9e1; border-radius: 11px; background: #fbfcfa; }
+  .panel-summary-placeholder { margin: 0; padding: 10px 8px; color: #738076; font-size: 12px; line-height: 1.6; }
+  .panel-summary-row { display: grid; width: 100%; min-width: 0; min-height: 54px; grid-template-columns: 32px minmax(0, 1fr) 76px; align-items: center; gap: 8px; padding: 14px 9px; border: 0; border-bottom: 1px solid #e9eee7; border-radius: 7px; background: transparent; color: #304236; font: inherit; text-align: left; cursor: pointer; }
+  .panel-summary-row:hover, .panel-summary-row:focus-visible { background: #edf4ea; }
+  .panel-summary-number { display: inline-grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; background: #eaf1e7; color: #416149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 750; }
+  .panel-summary-marker { display: inline-grid; width: 25px; height: 25px; place-items: center; border-radius: 7px; background: #f1f2ed; color: #85877b; font-size: 10px; font-weight: 700; }
+  .panel-summary-row[data-kind="unclear"] .panel-summary-marker { background: #f5efdf; color: #816536; }
+  .panel-summary-title { min-width: 0; overflow: hidden; color: #36453a; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .panel-summary-count { justify-self: end; color: #66746a; font-size: 13px; font-weight: 680; text-align: right; white-space: nowrap; }
+  .panel-summary-row[data-kind="opinions"] .panel-summary-title, .panel-summary-row[data-kind="unclear"] .panel-summary-title { color: #6e766f; font-size: 13px; font-weight: 570; }
+  .panel-summary-row[data-kind="opinions"] .panel-summary-count, .panel-summary-row[data-kind="unclear"] .panel-summary-count { color: #858b84; font-size: 12px; font-weight: 600; }
+  .panel-summary-divider { height: 1px; margin: 7px 3px; border: 0; background: #dfe5dc; }
+  .bug-card.is-summary-highlight, .not-bugs-card.is-summary-highlight, .unclear-card.is-summary-highlight, .analysis-group.is-summary-highlight { outline: 3px solid #b9d486; outline-offset: 3px; box-shadow: 0 0 0 5px rgba(185, 212, 134, .16); }
+  .bug-card.is-summary-highlight, .not-bugs-card.is-summary-highlight, .unclear-card.is-summary-highlight { transition: outline-color 180ms ease, box-shadow 180ms ease; }
+  .analysis-status {
+    margin: 11px 0 0;
+    padding: 10px 12px;
+    border: 1px solid #dce8d9;
+    border-radius: 9px;
+    background: #f3f8f1;
+    color: #355b3d;
+    font-size: 12px;
+  }
+  .analysis-status[data-kind="error"] { border-color: #f0d5cc; background: #fff6f2; color: #963f2f; }
+  .analysis-status[data-kind="demo"] { border-color: #e7d9b6; background: #fff9e9; color: #72551c; }
+  .analysis-status[data-kind="loading"] { position: relative; padding-left: 36px; }
+  .analysis-status[data-kind="loading"]::before { position: absolute; top: 12px; left: 13px; width: 12px; height: 12px; border: 2px solid #bdd0bd; border-top-color: #315c3b; border-radius: 50%; content: ""; animation: bugpin-spin .75s linear infinite; }
+  @keyframes bugpin-spin { to { transform: rotate(360deg); } }
+  .analysis-output { margin-top: 18px; }
+  .analysis-output-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 0 0 12px; }
+  .analysis-output-title { margin: 0; color: #25352a; font-size: 21px; font-weight: 740; letter-spacing: -.045em; }
+  .analysis-output-order { color: #69766d; font-size: 12px; font-weight: 650; }
+  .analysis-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .analysis-summary-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 12px; min-height: 90px; padding: 15px 18px; border: 1px solid #dfe7dc; border-radius: 13px; background: #f7faf5; }
+  .analysis-summary-card[data-kind="opinions"] { border-color: #e9e7df; background: #fbfaf7; }
+  .analysis-summary-card[data-kind="unclear"] { border-color: #e9dfc9; background: #fffdf8; }
+  .analysis-summary-label { color: #59685d; font-size: 13px; font-weight: 680; }
+  .analysis-summary-count { grid-row: 1 / span 2; grid-column: 2; color: #284a32; font-size: 31px; font-weight: 770; letter-spacing: -.07em; line-height: 1; }
+  .analysis-summary-card[data-kind="opinions"] .analysis-summary-count { color: #6c6754; }
+  .analysis-summary-card[data-kind="unclear"] .analysis-summary-count { color: #816536; }
+  .analysis-summary-note { color: #768078; font-size: 11px; }
+  .analysis-results { display: grid; gap: 22px; margin-top: 20px; }
+  .analysis-group { display: grid; gap: 10px; min-width: 0; }
+  .analysis-group-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid #e1e6df; }
+  .analysis-group-title { margin: 0; color: #2d3b31; font-size: 16px; font-weight: 730; letter-spacing: -.025em; }
+  .analysis-group-meta { color: #7b857d; font-size: 11px; }
+  .bug-card-list { display: grid; gap: 10px; }
+  .bug-card, .not-bugs-card, .unclear-card { min-width: 0; overflow: hidden; border: 1px solid #dfe6dd; border-radius: 14px; background: #fff; box-shadow: 0 4px 16px rgba(39, 58, 44, .035); }
+  .bug-card[open] { border-color: #bfd0bd; box-shadow: 0 8px 25px rgba(39, 58, 44, .07); }
+  .bug-card > summary, .not-bugs-card > summary, .unclear-card > summary, .more-reports > summary { position: relative; padding: 17px 52px 17px 19px; cursor: pointer; list-style: none; }
+  .bug-card > summary::-webkit-details-marker, .not-bugs-card > summary::-webkit-details-marker, .unclear-card > summary::-webkit-details-marker, .more-reports > summary::-webkit-details-marker { display: none; }
+  .bug-card > summary::after, .not-bugs-card > summary::after, .unclear-card > summary::after, .more-reports > summary::after { position: absolute; top: 50%; right: 19px; color: #62776a; content: "+"; font-size: 21px; line-height: 1; transform: translateY(-50%); }
+  .bug-card[open] > summary::after, .not-bugs-card[open] > summary::after, .unclear-card[open] > summary::after, .more-reports[open] > summary::after { content: "−"; }
+  .bug-card-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .bug-card-title-wrap { display: grid; gap: 3px; min-width: 0; }
+  .bug-card-field-label { color: #78847a; font-size: 10px; font-weight: 710; letter-spacing: .035em; }
+  .bug-card-title { margin: 0; color: #1f2e24; font-size: 17px; font-weight: 740; letter-spacing: -.035em; line-height: 1.35; overflow-wrap: anywhere; }
+  .bug-card-count { display: inline-flex; min-height: 30px; flex: 0 0 auto; align-items: center; padding: 4px 10px; border-radius: 20px; background: #eaf2e8; color: #365b3c; font-size: 12px; font-weight: 730; white-space: nowrap; }
+  .bug-card-symptom-label { display: block; margin-top: 10px; }
+  .bug-card-symptom { display: -webkit-box; margin: 3px 0 0; overflow: hidden; color: #56645a; font-size: 14px; font-weight: 450; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+  .bug-card-detail { display: grid; gap: 18px; padding: 18px 19px 20px; border-top: 1px solid #ebefea; }
+  .bug-detail-section { min-width: 0; }
+  .bug-detail-heading { margin: 0 0 8px; color: #47594b; font-size: 12px; font-weight: 740; letter-spacing: .01em; }
+  .bug-core-symptom { margin: 0; color: #344338; font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+  .bug-card-reports { display: grid; gap: 10px; }
+  .report-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+  .report-list li { min-width: 0; padding: 12px 13px; border: 1px solid #e8ece7; border-radius: 9px; background: #fafbf9; }
+  .report-list li + li { margin-top: 7px; }
+  .report-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: #66736a; font-size: 12px; line-height: 1.5; }
+  .report-meta strong { color: #31583a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 730; }
+  .report-text { margin: 7px 0 0; color: #26332a; font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .more-reports { border: 1px solid #e6ebe4; border-radius: 9px; background: #f8faf7; }
+  .more-reports > summary { padding: 12px 40px 12px 13px; color: #4b6351; font-size: 12px; font-weight: 700; }
+  .more-reports > summary::after { right: 13px; font-size: 18px; }
+  .more-reports .report-list { padding: 0 10px 10px; }
+  .not-bugs-card, .unclear-card { box-shadow: none; }
+  .not-bugs-card { border-color: #e9e7df; background: #fbfaf7; }
+  .not-bugs-card > summary { color: #5d5a4d; font-size: 14px; font-weight: 720; }
+  .unclear-card { border-color: #e9dfc9; background: #fffdf8; }
+  .unclear-card > summary { color: #705b35; font-size: 14px; font-weight: 720; }
+  .not-bugs-card .report-list, .unclear-card .report-list { padding: 0 14px 14px; }
+  .analysis-group-empty { margin: 0; padding: 15px 17px; border: 1px dashed #dce4da; border-radius: 10px; color: #657168; background: #fafbf9; font-size: 13px; line-height: 1.6; }
+  .analysis-group-opinions { padding: 16px; border: 1px solid #ebe8df; border-radius: 15px; background: #faf9f5; }
+  .analysis-group-unclear { padding: 16px; border: 1px solid #eee3d0; border-radius: 15px; background: #fffdf8; }
+  .analysis-group-opinions .analysis-group-heading { border-color: #e5e2d8; }
+  .analysis-group-unclear .analysis-group-heading { border-color: #e9dfc9; }
+  .bug-rank { display: inline-grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border: 1px solid #dce6d9; border-radius: 8px; color: #4e6953; background: #f2f7f0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 750; }
+  .bug-card-top-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .suspect-confidence-detail { display: block; margin-top: 7px; color: #6f7c70; font-size: 11px; font-weight: 650; }
+  .analysis-temp-warning { margin: 12px 0 0; padding: 12px 15px; border: 1px solid #eadcb9; border-radius: 10px; background: #fff9eb; color: #705724; font-size: 13px; line-height: 1.65; }
+  .analysis-temp-warning strong { margin-right: 5px; }
+  .analysis-temp-warning[hidden] { display: none; }
+  .analysis-load-error { margin: 0; padding: 14px 16px; border: 1px solid #edcec5; border-radius: 10px; background: #fff6f2; color: #873d30; font-size: 14px; line-height: 1.7; }
+
+  .readme-panel { position: relative; background: #fbfcfa; }
+  .readme-panel .panel-inner { display: flex; min-height: 0; height: 100%; flex-direction: column; }
+  .readme-panel[aria-disabled="true"] .panel-heading { color: #556158; }
+  .readme-panel .project-context-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin: 15px 0 12px; padding: 4px; border: 1px solid #e1e8df; border-radius: 11px; background: #edf2eb; }
+  .readme-panel .project-context-tab { display: flex; min-width: 0; min-height: 42px; align-items: center; justify-content: center; gap: 7px; padding: 6px 9px; border: 0; border-radius: 8px; background: transparent; color: #536558; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .readme-panel .project-context-tab[aria-selected="true"] { background: var(--forest); color: #fff; box-shadow: 0 2px 5px rgba(32, 58, 49, .15); }
+  .readme-panel .project-context-tab:focus-visible { outline: 3px solid #76a46f; outline-offset: 2px; }
+  .readme-panel .project-context-ready { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #74b65b; box-shadow: 0 0 0 2px rgba(116, 182, 91, .18); }
+  .readme-panel .project-context-ready[hidden] { display: none; }
+  .readme-panel .project-context-content { min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  .readme-panel .project-context-tabpanel[hidden] { display: none; }
+  .readme-panel .project-context-actions { flex: 0 0 auto; margin-top: auto; padding-top: 10px; border-top: 1px solid #e6ebe4; }
+  .readme-panel .project-context-actions .readme-feedback { margin: 0 0 8px; font-size: 11px; line-height: 1.55; }
+  .readme-panel .project-context-actions .readme-analyze-button { margin-top: 0; }
+  .lock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px;
+    border: 1px solid #e5e9e2;
+    border-radius: 20px;
+    color: #7b847c;
+    font-size: 10px;
+    font-weight: 680;
+    white-space: nowrap;
+  }
+  .lock-badge svg { width: 12px; height: 12px; }
+  .readme-dropzone {
+    display: flex;
+    min-height: 162px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 18px;
+    border: 1px solid #ebede9;
+    border-radius: 13px;
+    background: #f5f6f3;
+    color: #8a928b;
+    text-align: center;
+  }
+  .readme-dropzone[data-dragging="true"] { border-color: #598265; background: #eef5ec; }
+  .file-icon { width: 30px; height: 30px; color: #8a978c; }
+  .readme-dropzone strong { color: #737d74; font-size: 12px; font-weight: 650; }
+  .readme-dropzone span { font-size: 10px; }
+  .readme-button {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--forest);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .readme-button:hover { background: #2d4d40; }
+  .readme-sample-button {
+    width: 100%;
+    min-height: 40px;
+    margin-top: 7px;
+    border: 1px solid #dfe5dc;
+    border-radius: 8px;
+    background: #fff;
+    color: #55705a;
+    font-size: 11px;
+    font-weight: 680;
+    cursor: pointer;
+  }
+  .readme-sample-button:hover { background: #f4f7f2; }
+  .readme-analyze-button {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 11px;
+    border: 1px solid #e2e7df;
+    border-radius: 8px;
+    background: #eef2ec;
+    color: #48644d;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .readme-analyze-button:disabled { cursor: not-allowed; opacity: .58; }
+  .readme-feedback { margin: 10px 0 0; color: #778078; font-size: 10px; line-height: 1.6; }
+  .readme-feedback[data-kind="error"] { color: #963f2f; }
+  .readme-feedback[data-kind="demo"] { color: #72551c; }
+  .readme-feedback[data-kind="loading"] { color: #48644d; }
+  .readme-feedback[hidden] { display: none; }
+  .readme-download { display: inline-block; margin-top: 7px; color: #55705a; font-size: 10px; text-underline-offset: 2px; }
+
+  .github-title { margin: 0; font-size: 14px; font-weight: 720; letter-spacing: -.035em; }
+  .github-description { margin: 5px 0 12px; color: #798279; font-size: 11px; line-height: 1.6; }
+  .github-url-label { display: block; margin-bottom: 6px; color: #657168; font-size: 10px; font-weight: 700; }
+  .github-connect-row { display: grid; grid-template-columns: minmax(0, 1fr) 78px; gap: 7px; }
+  .github-url-input { width: 100%; min-width: 0; min-height: 42px; padding: 0 10px; border: 1px solid #dfe5dc; border-radius: 8px; background: #fff; color: #26322a; font: inherit; font-size: 11px; }
+  .github-url-input::placeholder { color: #9aa198; }
+  .github-url-input:focus-visible { outline: 3px solid #477d5d; outline-offset: 2px; }
+  .github-connect-button { min-height: 42px; border: 0; border-radius: 8px; background: var(--forest); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .github-connect-button:hover:not(:disabled) { background: #2d4d40; }
+  .github-connect-button:disabled { cursor: wait; opacity: .65; }
+  .github-status { margin: 9px 0 0; color: #778078; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+  .github-status[data-kind="success"] { color: #355b3d; }
+  .github-status[data-kind="error"] { color: #963f2f; }
+  .github-status[hidden], .github-repo-summary[hidden], .github-file-browser[hidden], .github-code-preview[hidden] { display: none; }
+  .github-repo-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; margin-top: 12px; padding: 11px; border: 1px solid #dfe8dc; border-radius: 9px; background: #f5f8f3; }
+  .github-repo-name { min-width: 0; color: #294834; font-size: 12px; font-weight: 730; overflow-wrap: anywhere; }
+  .github-repo-branch { color: #64736a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; overflow-wrap: anywhere; }
+  .github-file-count { grid-row: 1 / span 2; grid-column: 2; align-self: center; padding: 5px 8px; border-radius: 20px; background: #e4eddf; color: #47684c; font-size: 10px; font-weight: 720; white-space: nowrap; }
+  .github-file-browser { margin-top: 10px; border: 1px solid #e4e9e1; border-radius: 9px; background: #fff; }
+  .github-file-browser > summary { padding: 11px; color: #4e6253; font-size: 11px; font-weight: 710; cursor: pointer; }
+  .github-file-list { display: grid; max-height: 220px; gap: 2px; overflow: auto; margin: 0; padding: 0 7px 8px; list-style: none; }
+  .github-file-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 35px; padding: 3px 4px; border-top: 1px solid #f0f2ed; }
+  .github-file-button { min-width: 0; min-height: 34px; padding: 0 4px; overflow: hidden; border: 0; background: transparent; color: #41634a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .github-file-button:hover:not(:disabled) { color: #203a31; text-decoration: underline; text-underline-offset: 2px; }
+  .github-file-button[aria-pressed="true"] { color: #203a31; font-weight: 760; }
+  .github-file-button:disabled { color: #99958a; cursor: not-allowed; }
+  .github-file-size { color: #8a928b; font-size: 9px; white-space: nowrap; }
+  .github-code-preview { margin-top: 11px; overflow: hidden; border: 1px solid #dfe5dc; border-radius: 10px; background: #fff; }
+  .github-code-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 11px; border-bottom: 1px solid #e8ece5; }
+  .github-code-path { min-width: 0; margin: 0; color: #3d5e45; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 700; overflow-wrap: anywhere; }
+  .github-code-lines { flex: 0 0 auto; color: #818a82; font-size: 9px; }
+  .github-code-source { max-height: 400px; margin: 0; padding: 13px; overflow: auto; background: #1e2c25; color: #e2ebe3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.65; tab-size: 4; white-space: pre; }
+  .github-tree-note { margin: 8px 1px 0; color: #8a7750; font-size: 10px; line-height: 1.5; }
+  .github-tree-note[hidden] { display: none; }
+
+  .suspect-location { min-width: 0; padding: 15px; border: 1px solid #d9e4d6; border-radius: 12px; background: #f7faf5; }
+  .suspect-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .suspect-label { margin: 0; color: #405d46; font-size: 14px; font-weight: 750; }
+  .suspect-confidence { flex: 0 0 auto; padding: 5px 9px; border-radius: 20px; background: #ecefe9; color: #69746c; font-size: 11px; font-weight: 730; }
+  .suspect-confidence[data-status="analyzing"] { background: #e6eee5; color: #46634c; }
+  .suspect-confidence[data-status="reanalyzing"] { background: #e6eee5; color: #46634c; }
+  .suspect-confidence[data-status="confirmed"] { background: #dff0d9; color: #2e6337; }
+  .suspect-confidence[data-status="candidate"] { background: #e8f1e4; color: #365d3c; }
+  .suspect-confidence[data-status="unavailable"] { background: #f2eddf; color: #785e27; }
+  .suspect-confidence[data-status="code_missing_suspected"] { background: #f7e8df; color: #8a442b; }
+  .suspect-confidence[data-status="location_confirmed"] { background: #e5f1df; color: #345f37; }
+  .suspect-confidence[data-status="location_unavailable"] { background: #f2eddf; color: #785e27; }
+  .suspect-empty { margin: 10px 0 0; color: #5d6b60; font-size: 13px; line-height: 1.65; }
+  .suspect-list { display: grid; gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .suspect-item { min-width: 0; padding: 11px 0 0; border-top: 1px solid #e1e9de; }
+  .suspect-location code { max-width: 100%; padding: 3px 6px; border-radius: 5px; background: #eaf0e8; color: #36513d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
+  .suspect-function { margin-left: 4px; }
+  .suspect-code-identity { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .52fr) auto; align-items: end; gap: 8px 12px; min-width: 0; }
+  .suspect-code-field { display: grid; gap: 4px; min-width: 0; }
+  .suspect-code-field-label { color: #718075; font-size: 10px; font-weight: 700; }
+  .suspect-code-field code { display: block; width: fit-content; max-width: 100%; overflow-wrap: anywhere; }
+  .suspect-lines { margin-left: auto; color: #69766d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; white-space: nowrap; }
+  .suspect-order { display: inline-grid; width: 23px; height: 23px; flex: 0 0 auto; place-items: center; margin-right: 7px; border-radius: 7px; background: #e8efe5; color: #49634c; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 740; }
+  .suspect-candidate-label { margin: 0 0 8px; color: #49634c; font-size: 12px; font-weight: 740; }
+  .suspect-reason-label { display: block; margin-top: 9px; color: #5c6d5e; font-size: 11px; font-weight: 740; }
+  .suspect-code-source { max-height: 280px; margin: 10px 0 0; padding: 12px; overflow: auto; border-radius: 8px; background: #1e2c25; color: #e2ebe3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.7; tab-size: 4; white-space: pre; }
+  .suspect-code-fact, .suspect-code-hypothesis { margin-top: 10px; padding: 10px 11px; border-radius: 8px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+  .suspect-code-fact { background: #eef4eb; color: #405a43; }
+  .suspect-code-hypothesis { background: #f4f1e8; color: #6b5934; }
+  .suspect-code-fact strong, .suspect-code-hypothesis strong { display: block; margin-bottom: 3px; font-size: 11px; }
+  .suspect-related-files { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid #e5eae2; color: #68756b; font-size: 11px; line-height: 1.75; overflow-wrap: anywhere; }
+  .suspect-related-files strong { color: #56675a; }
+  .suspect-code-note { margin: 10px 0 0; color: #705d3d; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+  .suspect-code-note[data-status="code_missing_suspected"] { color: #8a442b; }
+  .suspect-confirmed-badge { display: inline-flex; min-height: 23px; flex: 0 0 auto; align-items: center; padding: 3px 8px; border-radius: 20px; background: #e1f0dc; color: #32603a; font-size: 10px; font-weight: 760; }
+  .suspect-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .suspect-card-action { min-height: 40px; padding: 8px 12px; border: 1px solid #dce5d9; border-radius: 8px; background: #fff; color: #4c6250; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .suspect-card-action:hover:not(:disabled) { background: #eef5eb; }
+  .suspect-card-action:disabled { cursor: not-allowed; opacity: .55; }
+  .suspect-card-action.is-confirm { border-color: #cfe3ca; background: #eef7eb; color: #35603a; }
+  .suspect-card-action.is-reject { color: #58665b; }
+  .suspect-feedback-form { display: grid; gap: 10px; margin-top: 11px; padding: 12px; border: 1px solid #dfe8dc; border-radius: 10px; background: #fff; }
+  .suspect-feedback-form[hidden] { display: none; }
+  .suspect-feedback-title { margin: 0; color: #455d49; font-size: 11px; font-weight: 740; }
+  .suspect-feedback-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .suspect-feedback-chip { min-height: 34px; padding: 6px 9px; border: 1px solid #e1e7df; border-radius: 18px; background: #fff; color: #637066; font: inherit; font-size: 10px; cursor: pointer; }
+  .suspect-feedback-chip[aria-pressed="true"] { border-color: #8ba98a; background: #eaf3e7; color: #31533a; font-weight: 720; }
+  .suspect-feedback-text { width: 100%; min-height: 68px; resize: vertical; padding: 9px 10px; border: 1px solid #dfe5dc; border-radius: 8px; background: #fff; color: #27342b; font: inherit; font-size: 12px; line-height: 1.55; }
+  .suspect-feedback-text::placeholder { color: #99a098; }
+  .suspect-feedback-text:focus-visible { outline: 3px solid #91b287; outline-offset: 2px; }
+  .suspect-feedback-submit { min-height: 40px; padding: 8px 13px; border: 0; border-radius: 8px; background: var(--forest); color: #fff; font: inherit; font-size: 11px; font-weight: 720; cursor: pointer; }
+  .suspect-feedback-submit:hover:not(:disabled) { background: #2d4d40; }
+  .suspect-feedback-submit:disabled { cursor: not-allowed; opacity: .55; }
+  .suspect-excluded { margin-top: 12px; border: 1px solid #e3e6df; border-radius: 9px; background: #f5f6f2; }
+  .suspect-excluded > summary { min-height: 40px; padding: 11px 12px; color: #70796e; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .suspect-excluded-list { display: grid; gap: 8px; margin: 0; padding: 0 10px 10px; list-style: none; }
+  .suspect-excluded-item { padding: 10px; border: 1px solid #e7e9e3; border-radius: 8px; background: #fff; }
+  .suspect-excluded-name { color: #777c72; font-size: 11px; line-height: 1.55; text-decoration: line-through; text-decoration-color: #a97f75; overflow-wrap: anywhere; }
+  .suspect-excluded-reason { margin: 6px 0 0; color: #686f68; font-size: 11px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .suspect-undo-button { min-height: 34px; margin-top: 8px; padding: 5px 9px; border: 1px solid #dce4d9; border-radius: 7px; background: #f8faf7; color: #536755; font: inherit; font-size: 10px; font-weight: 680; cursor: pointer; }
+  .suspect-rerun-message { margin: 11px 0 0; padding: 10px 11px; border-radius: 8px; background: #f4f1e8; color: #6e5932; font-size: 12px; line-height: 1.65; }
+  .suspect-rerun-message[data-kind="error"] { background: #fff3ef; color: #8b4435; }
+  .suspect-rerun-form { margin-top: 10px; }
+  .suspect-rerun-form[hidden] { display: none; }
+  .suspect-confirmed-note { margin: 8px 0 0; color: #41694a; font-size: 11px; line-height: 1.55; }
+
+  .page-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 19px;
+    padding-top: 13px;
+    border-top: 1px solid #e0e4dd;
+    color: #879087;
+    font-size: 9px;
+    font-weight: 680;
+    letter-spacing: .1em;
+  }
+
+  @media (max-width: 1120px) {
+    .workspace-grid { grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); }
+    .readme-panel { grid-column: 1 / -1; min-height: 0; }
+    .readme-panel .panel-inner { display: flex; min-height: 0; flex-direction: column; }
+    .readme-panel .panel-heading { margin-top: 13px; }
+    .readme-panel .panel-description { min-height: 0; }
+    .readme-dropzone { min-height: 110px; margin-top: 10px; }
+    .readme-button { margin-top: 10px; }
+    .bug-panel { min-height: 0; }
+  }
+
+  @media (max-width: 760px) {
+    .topbar { min-height: 67px; padding-inline: 20px; }
+    .topbar-nav, .topbar-meta { display: none; }
+    main { padding-top: 25px; }
+    .breadcrumb { font-size: 8px; letter-spacing: .08em; }
+    .hero { grid-template-columns: 1fr; gap: 21px; padding: 31px 0 26px; }
+    h1 { font-size: clamp(38px, 10vw, 54px); }
+    .hero-visual { max-width: 520px; }
+    .workspace-grid { grid-template-columns: 1fr; gap: 12px; }
+    .panel { min-height: auto; }
+    .bug-panel { min-height: 345px; }
+    .readme-panel { grid-column: auto; }
+    .readme-panel .panel-inner { display: flex; min-height: 0; flex-direction: column; }
+    .readme-panel .panel-heading { margin-top: 17px; }
+    .readme-panel .panel-description { min-height: 0; }
+    .readme-dropzone { min-height: 136px; margin-top: 16px; }
+    .readme-button { margin-top: 12px; }
+    .readme-footnote { margin-top: 10px; }
+    .analysis-output { margin-top: 15px; }
+    .analysis-output-heading { align-items: start; flex-direction: column; gap: 3px; }
+    .analysis-output-title { font-size: 20px; }
+    .analysis-summary { grid-template-columns: 1fr; gap: 8px; }
+    .analysis-summary-card { min-height: 72px; padding: 12px 15px; }
+    .analysis-summary-count { font-size: 27px; }
+    .analysis-results { gap: 17px; margin-top: 15px; }
+    .analysis-group { gap: 8px; }
+    .analysis-group-opinions, .analysis-group-unclear { padding: 12px; }
+    .bug-card > summary { padding: 15px 42px 15px 14px; }
+    .bug-card > summary::after { right: 13px; }
+    .panel-summary-row { min-height: 54px; }
+    .bug-card-title { font-size: 16px; }
+    .bug-card-count { min-height: 28px; padding-inline: 8px; font-size: 11px; }
+    .bug-card-symptom { font-size: 13px; }
+    .bug-card-detail { gap: 15px; padding: 15px 13px 16px; }
+    .bug-core-symptom, .report-text { font-size: 14px; }
+    .report-list li { padding: 11px; }
+    .suspect-location { padding: 13px; }
+    .suspect-code-source { font-size: 11px; }
+    .suspect-code-identity { grid-template-columns: minmax(0, 1fr) minmax(0, .7fr); }
+    .suspect-lines { grid-column: 1 / -1; margin-left: 0; }
+  }
+
+  @media (max-width: 430px) {
+    main { padding-inline: 16px; }
+    .topbar { padding-inline: 16px; }
+    .brand-caption { font-size: 8px; }
+    .breadcrumb span:last-child { text-align: right; }
+    .panel-inner { padding: 18px; }
+    .page-footer { font-size: 8px; letter-spacing: .04em; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="BugPin 홈">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+        <path d="M20 3.5c-7.3 0-13.2 5.9-13.2 13.2 0 9.7 13.2 20 13.2 20s13.2-10.3 13.2-20C33.2 9.4 27.3 3.5 20 3.5Z" fill="#e66d55"/>
+        <circle cx="20" cy="16.7" r="7.2" fill="#fff7ed"/>
+        <path d="M17.1 16.7h5.8M20 13.8v5.8" stroke="#203a31" stroke-linecap="round" stroke-width="1.8"/>
+      </svg>
+      <span class="brand-lockup"><span class="brand-name">BugPin</span><span class="brand-caption">QA WORKSPACE</span></span>
+    </a>
+    <nav class="topbar-nav" aria-label="주요 메뉴">
+      <a href="#workspace" aria-current="page">워크스페이스<span class="nav-index">01</span></a>
+      <span>게임 QA 도구</span>
+    </nav>
+    <div class="topbar-meta"><span class="status-dot" aria-hidden="true"></span><span>새 프로젝트</span></div>
+  </header>
+
+  <main id="home">
+    <div class="breadcrumb"><span>PROJECT / QA OPERATIONS</span><span>BUG REPORT WORKSPACE &nbsp;·&nbsp; 01</span></div>
+
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow"><span class="eyebrow-number">01</span> BUG TRIAGE DESK</p>
+        <h1 id="page-title">제보를 정리하고,<br><span>고칠 곳을 찾으세요.</span></h1>
+        <p class="hero-description">흩어진 게임 버그 제보를 한곳에 모아, 중복을 줄이고 원인을 더 빠르게 좁혀 보세요.</p>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <svg viewBox="0 0 500 208" role="presentation">
+          <defs>
+            <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
+              <path d="M26 0H0v26" fill="none" stroke="#ffffff" stroke-opacity=".09" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect x="1" y="1" width="498" height="206" rx="15" fill="#203a31"/>
+          <rect x="1" y="1" width="498" height="206" rx="15" fill="url(#grid)"/>
+          <path d="M38 158C98 158 106 130 160 130s65-44 115-44 66 24 104 24 48-42 84-42" fill="none" stroke="#b7e779" stroke-linecap="round" stroke-width="2.5"/>
+          <path d="M38 158C98 158 106 130 160 130s65-44 115-44 66 24 104 24 48-42 84-42v52c-36 0-48 42-84 42s-66-24-104-24-65 44-115 44-62 28-122 28Z" fill="#b7e779" fill-opacity=".08"/>
+          <circle cx="38" cy="158" r="4" fill="#b7e779"/>
+          <circle cx="160" cy="130" r="4" fill="#b7e779"/>
+          <circle cx="275" cy="86" r="4" fill="#b7e779"/>
+          <circle cx="379" cy="110" r="4" fill="#b7e779"/>
+          <circle cx="463" cy="68" r="7" fill="#e66d55" stroke="#fff7ed" stroke-width="3"/>
+          <path d="M44 43h73M44 54h46" stroke="#d2ddd4" stroke-linecap="round" stroke-opacity=".65" stroke-width="2"/>
+          <rect x="342" y="25" width="112" height="29" rx="7" fill="#ffffff" fill-opacity=".1"/>
+          <circle cx="356" cy="39.5" r="3" fill="#b7e779"/>
+          <path d="M366 39h47" stroke="#dbe5da" stroke-linecap="round" stroke-opacity=".8" stroke-width="2"/>
+          <path d="M44 177h78" stroke="#d2ddd4" stroke-linecap="round" stroke-opacity=".35" stroke-width="2"/>
+          <path d="M44 188h43" stroke="#d2ddd4" stroke-linecap="round" stroke-opacity=".24" stroke-width="2"/>
+        </svg>
+        <div class="visual-caption"><span>REPORT SIGNAL</span><strong>IMPORT &nbsp;→&nbsp; GROUP &nbsp;→&nbsp; LOCATE</strong></div>
+      </div>
+    </section>
+
+    <section class="workspace-grid" id="workspace" aria-label="버그 분석 워크스페이스">
+      <section class="panel" aria-labelledby="upload-title">
+        <div class="panel-inner">
+          <div class="panel-header">
+            <p class="panel-label"><span class="panel-number">01</span> REPORT INTAKE</p>
+          </div>
+          <h2 class="panel-heading" id="upload-title">제보 CSV 업로드</h2>
+          <p class="panel-description">테스터가 보낸 제보 파일을 올려 분석을 시작하세요.</p>
+          <div class="dropzone">
+            <svg class="upload-icon" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+              <path d="M20 25V8m0 0-6 6m6-6 6 6M9 23v8a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2v-8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+              <path d="M13 19H9a4 4 0 0 0-4 4v4" stroke="currentColor" stroke-linecap="round" stroke-width="2" opacity=".45"/>
+            </svg>
+            <p class="dropzone-title">CSV 파일을 끌어다 놓으세요</p>
+            <p class="dropzone-note">파일을 선택하거나 샘플 제보를 바로 확인하세요</p>
+            <input id="report-file" type="file" accept=".csv,text/csv" hidden>
+            <div class="upload-actions">
+              <button class="button-primary" id="choose-report-file" type="button">CSV 파일 선택</button>
+              <button class="button-sample" id="load-sample" type="button">샘플 20건 불러오기</button>
+            </div>
+          </div>
+          <div class="required-fields" aria-label="필수 CSV 열">
+            <span>report_id</span><span>reporter</span><span>created_at</span><span>text</span>
+          </div>
+          <p class="field-note">필수 열 4개 · UTF-8 / CP949 지원 · <a class="sample-download" href="sample_reports.csv" download>샘플 CSV 다운로드</a></p>
+          <p class="upload-feedback" id="upload-feedback" role="status" aria-live="polite" hidden></p>
+        </div>
+      </section>
+
+      <section class="panel bug-panel" aria-labelledby="bugs-title">
+        <div class="panel-inner">
+          <div class="panel-header">
+            <p class="panel-label"><span class="panel-number">02</span> BUG CLUSTERS</p>
+            <span class="count-badge" id="bug-count">0 BUGS</span>
+          </div>
+          <h2 class="panel-heading" id="bugs-title">버그 목록</h2>
+          <p class="panel-description">비슷한 제보를 묶어 확인할 수 있어요.</p>
+          <button class="analyze-button" id="analyze-reports" type="button">분석 시작</button>
+          <p class="analysis-status" id="analysis-status" role="status" aria-live="polite" hidden></p>
+          <div class="panel-summary-list" id="panel-summary-list" aria-label="분석 결과 요약 목록">
+            <p class="panel-summary-placeholder">분석을 시작하면 버그 목록이 여기에 표시됩니다</p>
+          </div>
+          <div class="empty-state" id="empty-state">
+            <svg class="empty-illustration" viewBox="0 0 100 90" fill="none" aria-hidden="true">
+              <path d="M24 66h52a8 8 0 0 0 8-8V26a8 8 0 0 0-8-8H34a8 8 0 0 0-8 8v9" stroke="#bfcbbf" stroke-width="2" stroke-dasharray="4 5"/>
+              <path d="M18 48h26a8 8 0 0 1 8 8v16H18a8 8 0 0 1-8-8v-8a8 8 0 0 1 8-8Z" fill="#edf2eb" stroke="#c5d1c4" stroke-width="2"/>
+              <path d="M24 57h20M24 64h13" stroke="#9aab9c" stroke-linecap="round" stroke-width="2"/>
+              <path d="M72 21v15m-7.5-7.5h15" stroke="#e66d55" stroke-linecap="round" stroke-width="2.5"/>
+              <circle cx="72" cy="28.5" r="14" stroke="#e66d55" stroke-opacity=".2" stroke-width="1.5"/>
+            </svg>
+            <p class="empty-kicker">WAITING FOR REPORTS</p>
+            <h3 class="empty-title">아직 분석된 버그가 없습니다</h3>
+            <p class="empty-copy">제보 CSV를 올리면 같은 증상의 제보를 묶어 이곳에 보여 드립니다.</p>
+            <div class="empty-step" aria-label="분석 순서"><strong>제보 업로드</strong><span>→</span><span>버그 분석</span><span>→</span><span>원문 확인</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel readme-panel" aria-labelledby="readme-title">
+        <div class="panel-inner">
+          <div class="panel-header">
+            <p class="panel-label"><span class="panel-number">03</span> PROJECT CONTEXT</p>
+            <span class="lock-badge">활성</span>
+          </div>
+          <h2 class="panel-heading" id="readme-title">프로젝트 정보</h2>
+          <p class="panel-description">README 설명이나 GitHub 저장소를 연결해 의심 위치를 찾아보세요.</p>
+          <div class="project-context-tabs" role="tablist" aria-label="프로젝트 정보 입력 방식">
+            <button class="project-context-tab" id="readme-tab" type="button" role="tab" aria-selected="true" aria-controls="readme-tab-panel" tabindex="0">
+              README 업로드 <span class="project-context-ready" id="readme-ready-indicator" aria-hidden="true" hidden></span>
+            </button>
+            <button class="project-context-tab" id="github-tab" type="button" role="tab" aria-selected="false" aria-controls="github-tab-panel" tabindex="-1">
+              GitHub 저장소 <span class="project-context-ready" id="github-ready-indicator" aria-hidden="true" hidden></span>
+            </button>
+          </div>
+          <div class="project-context-content">
+            <div class="project-context-tabpanel" id="readme-tab-panel" role="tabpanel" aria-labelledby="readme-tab" tabindex="0">
+              <input id="readme-file" type="file" accept=".md,text/markdown,text/plain" hidden>
+              <div class="readme-dropzone" id="readme-dropzone">
+                <svg class="file-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                  <path d="M8 3.5h10l7 7v17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-23a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6"/>
+                  <path d="M18 4v7h7M11 17h10M11 21h10" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"/>
+                </svg>
+                <strong id="readme-file-name">README.md를 선택해 주세요</strong>
+                <span id="readme-file-hint">스크립트 목록과 기능 설명이 담긴 파일</span>
+              </div>
+              <button class="readme-button" id="choose-readme" type="button">README 파일 선택</button>
+              <button class="readme-sample-button" id="load-sample-readme" type="button">샘플 README 불러오기</button>
+              <a class="readme-download" href="sample_README.md" download>샘플 README 다운로드</a>
+            </div>
+            <section class="project-context-tabpanel" id="github-tab-panel" role="tabpanel" aria-labelledby="github-tab" tabindex="0" hidden>
+              <h3 class="github-title" id="github-title">GitHub 저장소 연결</h3>
+              <p class="github-description">저장소의 C# 파일을 서버에서 읽어 목록과 내용을 확인합니다. 비공개 저장소에는 서버의 읽기 권한 토큰이 필요합니다.</p>
+              <label class="github-url-label" for="github-repo-url">GitHub 저장소 주소</label>
+              <form class="github-connect-row" id="github-connect-form">
+                <input class="github-url-input" id="github-repo-url" name="repoUrl" type="url" placeholder="https://github.com/owner/repo" autocomplete="url" required>
+                <button class="github-connect-button" id="connect-github" type="submit">연결</button>
+              </form>
+              <p class="github-status" id="github-status" role="status" aria-live="polite">공개 저장소는 바로 조회할 수 있습니다. 토큰은 브라우저에 전달되지 않습니다.</p>
+              <div class="github-repo-summary" id="github-repo-summary" hidden>
+                <span class="github-repo-name" id="github-repo-name"></span>
+                <span class="github-repo-branch" id="github-repo-branch"></span>
+                <span class="github-file-count" id="github-file-count"></span>
+              </div>
+              <p class="github-tree-note" id="github-tree-note" hidden></p>
+              <details class="github-file-browser" id="github-file-browser" hidden>
+                <summary id="github-files-summary">C# 파일 목록</summary>
+                <ul class="github-file-list" id="github-files-list"></ul>
+              </details>
+              <section class="github-code-preview" id="github-code-preview" aria-label="GitHub C# 파일 내용" hidden>
+                <div class="github-code-header">
+                  <p class="github-code-path" id="github-code-path"></p>
+                  <span class="github-code-lines" id="github-code-lines"></span>
+                </div>
+                <pre class="github-code-source"><code id="github-code-content"></code></pre>
+              </section>
+            </section>
+          </div>
+          <div class="project-context-actions">
+            <p class="readme-feedback" id="readme-feedback" role="status" aria-live="polite">GitHub 연결은 실제 코드와 줄 번호를 확인하고, README 분석은 기능 설명으로 후보만 추정합니다.</p>
+            <button class="readme-analyze-button" id="locate-suspects" type="button" disabled>의심 위치 찾기</button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="analysis-output" id="analysis-output" aria-labelledby="analysis-output-title" hidden>
+      <div class="analysis-output-heading">
+        <h2 class="analysis-output-title" id="analysis-output-title">분석 결과</h2>
+        <span class="analysis-output-order" id="analysis-output-order">버그 묶음 · 제보 많은 순</span>
+      </div>
+      <p class="analysis-temp-warning" id="analysis-temp-warning" role="status" hidden></p>
+      <p class="analysis-card-error" id="analysis-output-error" role="alert" hidden></p>
+      <div class="analysis-summary" id="analysis-summary" aria-label="분석 결과 요약"></div>
+      <div class="analysis-results" id="analysis-results"></div>
+    </section>
+
+    <section class="report-preview" id="report-preview" aria-labelledby="preview-title" hidden>
+      <div class="preview-inner">
+        <div class="preview-header">
+          <div>
+            <p class="panel-label"><span class="panel-number">CSV</span> REPORT PREVIEW</p>
+            <h2 class="preview-title" id="preview-title">불러온 제보</h2>
+          </div>
+          <span class="preview-count" id="preview-count">0건</span>
+        </div>
+        <div class="table-wrap">
+          <table class="preview-table">
+            <thead><tr><th scope="col">report_id</th><th scope="col">reporter</th><th scope="col">created_at</th><th scope="col">text</th></tr></thead>
+            <tbody id="preview-rows"></tbody>
+          </table>
+        </div>
+        <p class="preview-note" id="preview-note"></p>
+      </div>
+    </section>
+
+    <footer class="page-footer"><span>BUGPIN &nbsp;·&nbsp; QA WORKSPACE</span><span>REPORTS &nbsp;→&nbsp; BUG CLUSTERS &nbsp;→&nbsp; SUSPECT SCRIPTS</span></footer>
+  </main>
+  <script type="module">
+    import { getReadmeLocationPresentation, getSuspectStatusPresentation, normalizeAnalysisForView, parseReports, requiredColumns } from "/analysis-view-model.js";
+    const reportInput = document.getElementById("report-file");
+    const chooseFileButton = document.getElementById("choose-report-file");
+    const loadSampleButton = document.getElementById("load-sample");
+    const dropzone = document.querySelector(".dropzone");
+    const uploadFeedback = document.getElementById("upload-feedback");
+    const reportPreview = document.getElementById("report-preview");
+    const previewCount = document.getElementById("preview-count");
+    const previewRows = document.getElementById("preview-rows");
+    const previewNote = document.getElementById("preview-note");
+    const analyzeButton = document.getElementById("analyze-reports");
+    const panelSummaryList = document.getElementById("panel-summary-list");
+    const analysisStatus = document.getElementById("analysis-status");
+    const analysisOutput = document.getElementById("analysis-output");
+    const analysisSummary = document.getElementById("analysis-summary");
+    const analysisResults = document.getElementById("analysis-results");
+    const analysisTempWarning = document.getElementById("analysis-temp-warning");
+    const analysisFailure = document.getElementById("analysis-output-error");
+    const bugCount = document.getElementById("bug-count");
+    const emptyState = document.getElementById("empty-state");
+    const readmeInput = document.getElementById("readme-file");
+    const readmeDropzone = document.getElementById("readme-dropzone");
+    const chooseReadmeButton = document.getElementById("choose-readme");
+    const loadSampleReadmeButton = document.getElementById("load-sample-readme");
+    const locateSuspectsButton = document.getElementById("locate-suspects");
+    const readmeFileName = document.getElementById("readme-file-name");
+    const readmeFileHint = document.getElementById("readme-file-hint");
+    const readmeFeedback = document.getElementById("readme-feedback");
+    const projectContextTablist = document.querySelector(".project-context-tabs");
+    const readmeTab = document.getElementById("readme-tab");
+    const githubTab = document.getElementById("github-tab");
+    const readmeTabPanel = document.getElementById("readme-tab-panel");
+    const githubTabPanel = document.getElementById("github-tab-panel");
+    const readmeReadyIndicator = document.getElementById("readme-ready-indicator");
+    const githubReadyIndicator = document.getElementById("github-ready-indicator");
+    const githubConnectForm = document.getElementById("github-connect-form");
+    const githubUrlInput = document.getElementById("github-repo-url");
+    const githubConnectButton = document.getElementById("connect-github");
+    const githubStatus = document.getElementById("github-status");
+    const githubRepoSummary = document.getElementById("github-repo-summary");
+    const githubRepoName = document.getElementById("github-repo-name");
+    const githubRepoBranch = document.getElementById("github-repo-branch");
+    const githubFileCount = document.getElementById("github-file-count");
+    const githubTreeNote = document.getElementById("github-tree-note");
+    const githubFileBrowser = document.getElementById("github-file-browser");
+    const githubFilesSummary = document.getElementById("github-files-summary");
+    const githubFilesList = document.getElementById("github-files-list");
+    const githubCodePreview = document.getElementById("github-code-preview");
+    const githubCodePath = document.getElementById("github-code-path");
+    const githubCodeLines = document.getElementById("github-code-lines");
+    const githubCodeContent = document.getElementById("github-code-content");
+
+    window.bugPinReports = [];
+    window.bugPinAnalysis = null;
+    window.bugPinReadme = "";
+    window.bugPinLocations = null;
+    window.bugPinSuspectNodes = new Map();
+    window.bugPinLocationStates = new Map();
+    window.bugPinGitHubConnection = null;
+    let githubFileRequestVersion = 0;
+    let highlightedSummaryTarget = null;
+    let summaryHighlightTimer = null;
+
+    function clearAnalysis() {
+      window.bugPinAnalysis = null;
+      window.bugPinLocations = null;
+      window.bugPinSuspectNodes = new Map();
+      locateSuspectsButton.disabled = true;
+      setPanelSummaryPlaceholder("분석을 시작하면 버그 목록이 여기에 표시됩니다");
+      analysisOutput.hidden = true;
+      analysisSummary.replaceChildren();
+      analysisResults.replaceChildren();
+      analysisTempWarning.hidden = true;
+      analysisTempWarning.textContent = "";
+      analysisFailure.hidden = true;
+      analysisFailure.textContent = "";
+      analysisStatus.hidden = true;
+      analysisStatus.textContent = "";
+      delete analysisStatus.dataset.kind;
+      bugCount.textContent = "0 BUGS";
+      emptyState.hidden = false;
+    }
+
+    function setPanelSummaryPlaceholder(message) {
+      const placeholder = document.createElement("p");
+      placeholder.className = "panel-summary-placeholder";
+      placeholder.textContent = message;
+      panelSummaryList.replaceChildren(placeholder);
+    }
+
+    function jumpToAnalysisTarget(target) {
+      if (!target) return;
+      if (target instanceof HTMLDetailsElement) target.open = true;
+      if (highlightedSummaryTarget) highlightedSummaryTarget.classList.remove("is-summary-highlight");
+      if (summaryHighlightTimer) window.clearTimeout(summaryHighlightTimer);
+      highlightedSummaryTarget = target;
+      target.classList.add("is-summary-highlight");
+      target.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "center",
+      });
+      summaryHighlightTimer = window.setTimeout(() => {
+        target.classList.remove("is-summary-highlight");
+        if (highlightedSummaryTarget === target) highlightedSummaryTarget = null;
+        summaryHighlightTimer = null;
+      }, 1500);
+    }
+
+    function renderPanelSummary(entries) {
+      const fragment = document.createDocumentFragment();
+      entries.forEach((entry) => {
+        if (entry.kind === "opinions") {
+          const divider = document.createElement("hr");
+          divider.className = "panel-summary-divider";
+          divider.setAttribute("aria-hidden", "true");
+          fragment.append(divider);
+        }
+
+        const button = document.createElement("button");
+        button.className = "panel-summary-row";
+        button.type = "button";
+        button.dataset.kind = entry.kind;
+        button.setAttribute("aria-label", entry.kind === "bug"
+          ? `${entry.number}. ${entry.title}, 제보 ${entry.count}건으로 이동`
+          : `${entry.title} ${entry.count}건으로 이동`);
+
+        const marker = document.createElement("span");
+        if (entry.kind === "bug") {
+          marker.className = "panel-summary-number";
+          marker.textContent = String(entry.number);
+        } else {
+          marker.className = "panel-summary-marker";
+          marker.textContent = entry.kind === "opinions" ? "의" : "확";
+        }
+        const title = document.createElement("span");
+        title.className = "panel-summary-title";
+        title.textContent = entry.title;
+        title.title = title.textContent;
+        const count = document.createElement("span");
+        count.className = "panel-summary-count";
+        count.textContent = entry.kind === "bug" ? `제보 ${entry.count}건` : `${entry.count}건`;
+        button.append(marker, title, count);
+        button.addEventListener("click", () => jumpToAnalysisTarget(entry.target));
+        fragment.append(button);
+      });
+      panelSummaryList.replaceChildren(fragment);
+    }
+
+    function clearLoadedReports() {
+      window.bugPinReports = [];
+      reportPreview.hidden = true;
+      previewRows.replaceChildren();
+      clearAnalysis();
+    }
+
+    function showUploadError(error) {
+      clearLoadedReports();
+      const message = error.message.startsWith("missing-columns:")
+        ? `필수 열이 없습니다 (${error.message.slice("missing-columns:".length)}). 필요한 열: ${requiredColumns.join(", ")}.`
+        : error.message === "empty-file"
+          ? `파일이 비어 있습니다. 필요한 열(${requiredColumns.join(", ")})이 포함된 CSV를 올려 주세요.`
+          : error.message === "no-reports"
+            ? `제보 데이터가 없습니다. 헤더 아래에 제보 행을 추가해 주세요. 필요한 열: ${requiredColumns.join(", ")}.`
+            : error.message === "unclosed-quote"
+              ? "CSV의 따옴표가 닫히지 않았습니다. 쉼표나 줄바꿈이 포함된 문장을 큰따옴표로 감싸 주세요."
+              : error.message === "sample-unavailable"
+                ? "샘플 CSV를 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+                : "파일을 읽지 못했습니다. UTF-8 또는 엑셀 CP949 형식의 CSV인지 확인해 주세요.";
+      uploadFeedback.dataset.kind = "error";
+      uploadFeedback.textContent = message;
+      uploadFeedback.hidden = false;
+    }
+
+    function renderReports(reports) {
+      const fragment = document.createDocumentFragment();
+      for (const report of reports.slice(0, 10)) {
+        const row = document.createElement("tr");
+        for (const column of requiredColumns) {
+          const cell = document.createElement("td");
+          cell.textContent = report[column];
+          row.append(cell);
+        }
+        fragment.append(row);
+      }
+      previewRows.replaceChildren(fragment);
+      previewCount.textContent = `${reports.length}건`;
+      previewNote.textContent = reports.length > 10
+        ? `전체 ${reports.length}건 중 앞 10건을 표시합니다.`
+        : `총 ${reports.length}건의 제보를 모두 표시합니다.`;
+      reportPreview.hidden = false;
+      window.bugPinReports = reports;
+      clearAnalysis();
+      emptyState.hidden = true;
+      analysisStatus.textContent = `제보 ${reports.length}건을 불러왔습니다. 분석을 시작해 보세요.`;
+      analysisStatus.dataset.kind = "success";
+      analysisStatus.hidden = false;
+      uploadFeedback.dataset.kind = "success";
+      uploadFeedback.textContent = `제보 ${reports.length}건 불러옴`;
+      uploadFeedback.hidden = false;
+    }
+
+    function importCsv(csv) {
+      try {
+        renderReports(parseReports(csv));
+      } catch (error) {
+        showUploadError(error);
+      }
+    }
+
+    function setAnalysisStatus(message, kind = "success") {
+      analysisStatus.textContent = message;
+      analysisStatus.dataset.kind = kind;
+      analysisStatus.hidden = false;
+    }
+
+    function setReadmeStatus(message, kind = "success") {
+      readmeFeedback.textContent = message;
+      readmeFeedback.dataset.kind = kind;
+      readmeFeedback.hidden = false;
+    }
+
+    function selectProjectContextTab(tabName, moveFocus = false) {
+      const selectedTab = tabName === "github" ? githubTab : readmeTab;
+      const otherTab = selectedTab === githubTab ? readmeTab : githubTab;
+      const selectedPanel = selectedTab === githubTab ? githubTabPanel : readmeTabPanel;
+      const otherPanel = selectedPanel === githubTabPanel ? readmeTabPanel : githubTabPanel;
+      selectedTab.setAttribute("aria-selected", "true");
+      selectedTab.tabIndex = 0;
+      otherTab.setAttribute("aria-selected", "false");
+      otherTab.tabIndex = -1;
+      selectedPanel.hidden = false;
+      otherPanel.hidden = true;
+      if (moveFocus) selectedTab.focus();
+    }
+
+    function updateProjectContextReadyState() {
+      const hasReadme = Boolean(window.bugPinReadme.trim());
+      const hasGithub = Boolean(window.bugPinGitHubConnection);
+      readmeReadyIndicator.hidden = !hasReadme;
+      githubReadyIndicator.hidden = !hasGithub;
+      readmeTab.setAttribute("aria-label", hasReadme ? "README 업로드, 준비됨" : "README 업로드");
+      githubTab.setAttribute("aria-label", hasGithub ? "GitHub 저장소, 연결됨" : "GitHub 저장소");
+    }
+
+    readmeTab.addEventListener("click", () => selectProjectContextTab("readme"));
+    githubTab.addEventListener("click", () => selectProjectContextTab("github"));
+    projectContextTablist.addEventListener("keydown", (event) => {
+      const tabs = [readmeTab, githubTab];
+      const currentIndex = tabs.indexOf(document.activeElement);
+      if (currentIndex < 0) return;
+      let nextIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+      else if (event.key === "ArrowLeft") nextIndex = (currentIndex + tabs.length - 1) % tabs.length;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      selectProjectContextTab(tabs[nextIndex] === githubTab ? "github" : "readme", true);
+    });
+    updateProjectContextReadyState();
+
+    function updateLocationButton() {
+      locateSuspectsButton.disabled = !window.bugPinAnalysis || window.bugPinAnalysis.bugs.length === 0;
+      locateSuspectsButton.textContent = window.bugPinGitHubConnection
+        ? "GitHub 실제 코드로 분석"
+        : window.bugPinReadme
+          ? "README 후보 분석"
+          : "의심 위치 찾기";
+    }
+
+    function resetSuspectCards(message) {
+      window.bugPinLocations = null;
+      for (const nodes of window.bugPinSuspectNodes.values()) {
+        const state = createLocationState(window.bugPinGitHubConnection ? "github" : "readme", [], {
+          baseStatus: "unanalysed",
+          note: message,
+        });
+        window.bugPinLocationStates.set(nodes.bugId, state);
+        const status = getSuspectStatusPresentation("unanalysed");
+        nodes.confidence.textContent = status.label;
+        nodes.confidence.dataset.status = status.kind;
+        const empty = document.createElement("p");
+        empty.className = "suspect-empty";
+        empty.textContent = message;
+        nodes.content.replaceChildren(empty);
+      }
+    }
+
+    function setSuspectCardsAnalyzing(message) {
+      for (const nodes of window.bugPinSuspectNodes.values()) {
+        const status = getSuspectStatusPresentation("analyzing");
+        nodes.confidence.textContent = status.label;
+        nodes.confidence.dataset.status = status.kind;
+        const note = document.createElement("p");
+        note.className = "suspect-empty";
+        note.textContent = message;
+        nodes.content.replaceChildren(note);
+      }
+    }
+
+    function setSuspectCardsUnavailable(message) {
+      for (const nodes of window.bugPinSuspectNodes.values()) {
+        const status = getSuspectStatusPresentation("unavailable");
+        nodes.confidence.textContent = status.label;
+        nodes.confidence.dataset.status = status.kind;
+        const note = document.createElement("p");
+        note.className = "suspect-code-note";
+        note.textContent = `${message} 근거 확인 필요.`;
+        nodes.content.replaceChildren(note);
+      }
+    }
+
+    function codeEvidenceNode(candidate, index, round = 1) {
+      const item = document.createElement("li");
+      item.className = "suspect-item";
+      const candidateLabel = document.createElement("p");
+      candidateLabel.className = "suspect-candidate-label";
+      candidateLabel.textContent = round > 1 ? `${round}차 탐색 · 실제 코드 후보 ${index + 1}` : `실제 코드 후보 ${index + 1}`;
+      const heading = document.createElement("div");
+      heading.className = "suspect-code-identity";
+      const fileField = document.createElement("div");
+      fileField.className = "suspect-code-field";
+      const fileLabel = document.createElement("span");
+      fileLabel.className = "suspect-code-field-label";
+      fileLabel.textContent = "소스 파일";
+      const file = document.createElement("code");
+      file.textContent = candidate.file;
+      fileField.append(fileLabel, file);
+      const functionField = document.createElement("div");
+      functionField.className = "suspect-code-field";
+      const functionLabel = document.createElement("span");
+      functionLabel.className = "suspect-code-field-label";
+      functionLabel.textContent = "관련 함수";
+      const functionName = document.createElement("code");
+      functionName.textContent = candidate.function ? `${candidate.function}()` : "함수 확인 불가";
+      functionField.append(functionLabel, functionName);
+      const lineRange = document.createElement("span");
+      lineRange.className = "suspect-lines";
+      lineRange.textContent = candidate.line_start === candidate.line_end
+        ? `L${candidate.line_start}`
+        : `L${candidate.line_start}-L${candidate.line_end}`;
+      heading.append(fileField, functionField, lineRange);
+
+      const source = document.createElement("pre");
+      source.className = "suspect-code-source";
+      const lineWidth = String(candidate.line_end).length;
+      source.textContent = candidate.code.split(/\r\n|\r|\n/)
+        .map((line, index) => `${String(candidate.line_start + index).padStart(lineWidth, " ")} | ${line}`)
+        .join("\n");
+
+      const fact = document.createElement("div");
+      fact.className = "suspect-code-fact";
+      const factLabel = document.createElement("strong");
+      factLabel.textContent = "코드에서 확인된 사실";
+      const factText = document.createElement("span");
+      factText.textContent = candidate.observed;
+      fact.append(factLabel, factText);
+
+      const hypothesis = document.createElement("div");
+      hypothesis.className = "suspect-code-hypothesis";
+      const hypothesisLabel = document.createElement("strong");
+      hypothesisLabel.textContent = "원인 추정";
+      const hypothesisText = document.createElement("span");
+      hypothesisText.textContent = candidate.reason || candidate.hypothesis;
+      hypothesis.append(hypothesisLabel, hypothesisText);
+
+      item.append(candidateLabel, heading, source, fact, hypothesis);
+      if (candidate.confidence) {
+        const confidence = document.createElement("p");
+        confidence.className = "suspect-confidence-detail";
+        confidence.textContent = `신뢰도: ${candidate.confidence}`;
+        item.append(confidence);
+      }
+      if (candidate.why_different) {
+        const different = document.createElement("p");
+        different.className = "suspect-rerun-message";
+        different.textContent = `이전 후보와 다른 점: ${candidate.why_different}`;
+        item.append(different);
+      }
+      return item;
+    }
+
+    function readmeCandidateNode(suspect, index, round = 1) {
+      const item = document.createElement("li");
+      item.className = "suspect-item";
+      const candidateLabel = document.createElement("p");
+      candidateLabel.className = "suspect-candidate-label";
+      candidateLabel.textContent = round > 1
+        ? `README 기반 ${round}차 탐색 후보 ${index + 1}`
+        : `README 기반 의심 후보 ${index + 1}`;
+      const heading = document.createElement("div");
+      heading.className = "suspect-code-identity";
+      const scriptField = document.createElement("div");
+      scriptField.className = "suspect-code-field";
+      const scriptLabel = document.createElement("span");
+      scriptLabel.className = "suspect-code-field-label";
+      scriptLabel.textContent = "의심 스크립트";
+      const script = document.createElement("code");
+      script.textContent = suspect.script || suspect.file || "스크립트 미특정";
+      scriptField.append(scriptLabel, script);
+      const functionField = document.createElement("div");
+      functionField.className = "suspect-code-field";
+      const functionLabel = document.createElement("span");
+      functionLabel.className = "suspect-code-field-label";
+      functionLabel.textContent = "관련 함수 후보";
+      const functionName = document.createElement("code");
+      functionName.textContent = suspect.function || "함수 미특정";
+      functionField.append(functionLabel, functionName);
+      heading.append(scriptField, functionField);
+      const reasonLabel = document.createElement("span");
+      reasonLabel.className = "suspect-reason-label";
+      reasonLabel.textContent = "의심 이유 (README 기능 설명 기반)";
+      const reason = document.createElement("p");
+      reason.className = "suspect-empty";
+      reason.textContent = suspect.reason || "근거 확인 필요";
+      item.append(candidateLabel, heading, reasonLabel, reason);
+      if (suspect.confidence) {
+        const confidence = document.createElement("p");
+        confidence.className = "suspect-confidence-detail";
+        confidence.textContent = `README 후보 신뢰도: ${suspect.confidence}`;
+        item.append(confidence);
+      }
+      if (suspect.why_different) {
+        const different = document.createElement("p");
+        different.className = "suspect-rerun-message";
+        different.textContent = `이전 후보와 다른 점: ${suspect.why_different}`;
+        item.append(different);
+      }
+      return item;
+    }
+
+    function isVerifiedCodeCandidate(candidate) {
+      return candidate && typeof candidate.file === "string" &&
+        typeof candidate.code === "string" && candidate.code.trim() &&
+        (candidate.function === null || typeof candidate.function === "string") &&
+        Number.isInteger(candidate.line_start) && candidate.line_start > 0 &&
+        Number.isInteger(candidate.line_end) && candidate.line_end >= candidate.line_start &&
+        candidate.line_end - candidate.line_start + 1 === candidate.code.split(/\r\n|\r|\n/).length &&
+        typeof candidate.observed === "string" && typeof candidate.hypothesis === "string";
+    }
+
+    const rerunFeedbackChoices = [
+      "이 함수는 관련 없음",
+      "다른 스크립트일 것 같음",
+      "증상과 로직이 안 맞음",
+    ];
+
+    function locationCandidateKey(candidate) {
+      return [candidate.source, candidate.file, candidate.function, candidate.line || candidate.line_start || ""].join("::");
+    }
+
+    function makeLocationCandidate(candidate, source, index, round) {
+      const normalized = { ...candidate, source, round };
+      normalized.candidateId = candidate.candidateId || `${locationCandidateKey(normalized)}::${round}::${index}`;
+      return normalized;
+    }
+
+    function createLocationState(mode, candidates = [], options = {}) {
+      const initialCandidates = candidates.map((candidate, index) => makeLocationCandidate(candidate, mode, index, 1));
+      return {
+        mode,
+        candidates: initialCandidates,
+        seenCandidates: initialCandidates.map(({ file, function: functionName, source, round }) => ({ file, function: functionName, source, round })),
+        excluded: [],
+        pendingRejection: null,
+        round: 1,
+        confirmedLocation: null,
+        feedbackDrafts: new Map(),
+        feedbackOpenFor: null,
+        searching: false,
+        searchMessage: "",
+        searchMessageKind: "notice",
+        showHintForm: false,
+        baseStatus: options.baseStatus || (initialCandidates.length ? "candidate" : "location_unavailable"),
+        confidence: options.confidence || "",
+        baseNote: options.note || "",
+        reviewedFiles: options.reviewedFiles || [],
+      };
+    }
+
+    function locationStateFor(bugId) {
+      let state = window.bugPinLocationStates.get(bugId);
+      if (!state) {
+        state = createLocationState(window.bugPinGitHubConnection ? "github" : "readme");
+        window.bugPinLocationStates.set(bugId, state);
+      }
+      return state;
+    }
+
+    function locationStatusFor(state) {
+      if (state.searching) return { label: "재탐색 중", kind: "reanalyzing" };
+      if (state.confirmedLocation) return { label: "위치 확정", kind: "confirmed" };
+      if (state.candidates.length > 0) return getSuspectStatusPresentation("candidate");
+      return getSuspectStatusPresentation(state.baseStatus || "location_unavailable");
+    }
+
+    function buildLocationFeedbackForm(bugId, state, draftId, title, candidate = null) {
+      const form = document.createElement("form");
+      form.className = "suspect-feedback-form";
+      form.hidden = (state.feedbackOpenFor !== draftId && !(draftId === "next-hint" && state.showHintForm)) || state.searching || Boolean(state.confirmedLocation);
+      const heading = document.createElement("p");
+      heading.className = "suspect-feedback-title";
+      heading.textContent = title;
+      const choices = document.createElement("div");
+      choices.className = "suspect-feedback-chips";
+      const draft = state.feedbackDrafts.get(draftId) || { reasons: [], free_text: "" };
+      rerunFeedbackChoices.forEach((reason, index) => {
+        const chip = document.createElement("button");
+        chip.className = "suspect-feedback-chip";
+        chip.type = "button";
+        chip.dataset.choiceIndex = String(index);
+        chip.setAttribute("aria-pressed", String(draft.reasons.includes(reason)));
+        chip.textContent = reason;
+        chip.addEventListener("click", () => {
+          const selected = new Set(draft.reasons);
+          if (selected.has(reason)) selected.delete(reason);
+          else selected.add(reason);
+          state.feedbackDrafts.set(draftId, { ...draft, reasons: [...selected] });
+          renderLocationState(bugId);
+          const restoredForm = window.bugPinSuspectNodes.get(bugId)?.content.querySelector(`[data-feedback-form="${draftId}"]`);
+          restoredForm?.querySelector(`[data-choice-index="${index}"]`)?.focus();
+        });
+        choices.append(chip);
+      });
+
+      const textarea = document.createElement("textarea");
+      textarea.className = "suspect-feedback-text";
+      textarea.dataset.feedbackInput = draftId;
+      textarea.maxLength = 2000;
+      textarea.placeholder = "다른 함수나 스크립트 등 위치 힌트를 적어 주세요 (선택)";
+      textarea.setAttribute("aria-label", "다른 의심 위치를 찾을 힌트");
+      textarea.value = draft.free_text;
+
+      const submit = document.createElement("button");
+      submit.className = "suspect-feedback-submit";
+      submit.type = "submit";
+      submit.textContent = state.searching ? "다시 찾는 중..." : "다시 찾기";
+      submit.disabled = state.searching || (draft.reasons.length === 0 && !draft.free_text.trim());
+
+      form.dataset.feedbackForm = draftId;
+      form.append(heading, choices, textarea, submit);
+      textarea.addEventListener("input", () => {
+        const current = state.feedbackDrafts.get(draftId) || { reasons: [], free_text: "" };
+        current.free_text = textarea.value;
+        state.feedbackDrafts.set(draftId, current);
+        submit.disabled = state.searching || (current.reasons.length === 0 && !current.free_text.trim());
+      });
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const current = state.feedbackDrafts.get(draftId) || { reasons: [], free_text: "" };
+        rerunLocationCandidate(bugId, candidate?.candidateId || null, current);
+      });
+      return form;
+    }
+
+    function candidateCardNode(bugId, candidate, index, state) {
+      const item = candidate.source === "github"
+        ? codeEvidenceNode(candidate, index, candidate.round)
+        : readmeCandidateNode(candidate, index, candidate.round);
+      item.dataset.candidateId = candidate.candidateId;
+
+      if (state.confirmedLocation?.candidateId === candidate.candidateId) {
+        const confirmed = document.createElement("span");
+        confirmed.className = "suspect-confirmed-badge";
+        confirmed.textContent = "확인됨";
+        item.append(confirmed);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "suspect-card-actions";
+      const confirmButton = document.createElement("button");
+      confirmButton.className = "suspect-card-action is-confirm";
+      confirmButton.type = "button";
+      confirmButton.textContent = state.confirmedLocation?.candidateId === candidate.candidateId ? "확인됨" : "여기 맞음";
+      confirmButton.disabled = state.searching || Boolean(state.confirmedLocation);
+      confirmButton.addEventListener("click", () => {
+        state.confirmedLocation = { ...candidate };
+        state.feedbackOpenFor = null;
+        state.searchMessage = "";
+        renderLocationState(bugId);
+      });
+
+      const rejectButton = document.createElement("button");
+      rejectButton.className = "suspect-card-action is-reject";
+      rejectButton.type = "button";
+      rejectButton.textContent = state.pendingRejection?.candidateId === candidate.candidateId
+        ? "다시 찾는 중..."
+        : "여기 아님 · 다른 곳 찾기";
+      rejectButton.disabled = state.searching || Boolean(state.confirmedLocation);
+      rejectButton.setAttribute("aria-expanded", String(state.feedbackOpenFor === candidate.candidateId));
+      rejectButton.addEventListener("click", () => {
+        state.feedbackOpenFor = state.feedbackOpenFor === candidate.candidateId ? null : candidate.candidateId;
+        if (!state.feedbackDrafts.has(candidate.candidateId)) state.feedbackDrafts.set(candidate.candidateId, { reasons: [], free_text: "" });
+        renderLocationState(bugId);
+        if (state.feedbackOpenFor) window.bugPinSuspectNodes.get(bugId)?.content.querySelector(`[data-feedback-form="${candidate.candidateId}"] .suspect-feedback-text`)?.focus();
+      });
+      actions.append(confirmButton, rejectButton);
+      item.append(actions, buildLocationFeedbackForm(bugId, state, candidate.candidateId, "이 후보가 아닌 이유", candidate));
+      return item;
+    }
+
+    function renderExcludedLocations(bugId, state) {
+      if (state.excluded.length === 0) return null;
+      const details = document.createElement("details");
+      details.className = "suspect-excluded";
+      const summary = document.createElement("summary");
+      summary.textContent = `제외된 위치 (${state.excluded.length})`;
+      const list = document.createElement("ul");
+      list.className = "suspect-excluded-list";
+      state.excluded.forEach((excluded, index) => {
+        const item = document.createElement("li");
+        item.className = "suspect-excluded-item";
+        const name = document.createElement("div");
+        name.className = "suspect-excluded-name";
+        name.textContent = `${excluded.file} / ${excluded.function}${excluded.line ? ` / ${excluded.line}` : ""}`;
+        const reason = document.createElement("p");
+        reason.className = "suspect-excluded-reason";
+        reason.textContent = [...excluded.reasons, excluded.free_text].filter(Boolean).join(" · ") || "사유 없음";
+        const undo = document.createElement("button");
+        undo.className = "suspect-undo-button";
+        undo.type = "button";
+        undo.textContent = "되돌리기";
+        undo.disabled = state.searching;
+        undo.addEventListener("click", () => {
+          const [restored] = state.excluded.splice(index, 1);
+          if (restored) {
+            const candidate = { ...restored };
+            delete candidate.reasons;
+            delete candidate.free_text;
+            delete candidate.excludedRound;
+            state.candidates.push(candidate);
+            state.candidates.sort((first, second) => first.round - second.round);
+            state.searchMessage = "";
+            state.showHintForm = false;
+            renderLocationState(bugId);
+          }
+        });
+        item.append(name, reason, undo);
+        list.append(item);
+      });
+      details.append(summary, list);
+      return details;
+    }
+
+    function renderLocationState(bugId) {
+      const nodes = window.bugPinSuspectNodes.get(bugId);
+      const state = window.bugPinLocationStates.get(bugId);
+      if (!nodes || !state) return;
+      const status = locationStatusFor(state);
+      nodes.confidence.textContent = status.label;
+      nodes.confidence.dataset.status = status.kind;
+      nodes.content.replaceChildren();
+
+      if (state.confidence && state.candidates.length > 0) {
+        const confidence = document.createElement("span");
+        confidence.className = "suspect-confidence-detail";
+        confidence.textContent = state.mode === "readme" ? `README 분석 신뢰도: ${state.confidence}` : "실제 저장소 코드 후보";
+        nodes.content.append(confidence);
+      }
+
+      if (state.candidates.length > 0) {
+        const list = document.createElement("ul");
+        list.className = "suspect-list";
+        state.candidates.forEach((candidate, index) => list.append(candidateCardNode(bugId, candidate, index, state)));
+        nodes.content.append(list);
+      } else if (state.baseNote) {
+        const note = document.createElement("p");
+        note.className = "suspect-code-note";
+        note.textContent = state.baseNote;
+        nodes.content.append(note);
+      } else if (!state.searchMessage) {
+        const empty = document.createElement("p");
+        empty.className = "suspect-empty";
+        empty.textContent = "위치를 특정하지 못했습니다. 다른 기능이나 파일 힌트를 입력해 다시 찾아볼 수 있습니다.";
+        nodes.content.append(empty);
+      }
+
+      if (state.searchMessage) {
+        const message = document.createElement("p");
+        message.className = "suspect-rerun-message";
+        if (state.searchMessageKind === "error") message.dataset.kind = "error";
+        message.textContent = state.searchMessage;
+        nodes.content.append(message);
+      }
+
+      const excluded = renderExcludedLocations(bugId, state);
+      if (excluded) nodes.content.append(excluded);
+
+      if (state.reviewedFiles?.length > 0) {
+        const reviewed = document.createElement("p");
+        reviewed.className = "suspect-related-files";
+        const label = document.createElement("strong");
+        label.textContent = "함께 검토한 실제 파일: ";
+        reviewed.append(label, document.createTextNode(state.reviewedFiles.join(" · ")));
+        nodes.content.append(reviewed);
+      }
+
+      if (state.missingEvidence) {
+        nodes.content.append(codeEvidenceNode(state.missingEvidence, 0, 1));
+      }
+
+      if (state.showHintForm && !state.searching && !state.confirmedLocation) {
+        nodes.content.append(buildLocationFeedbackForm(bugId, state, "next-hint", "추가 위치 힌트", null));
+      }
+      if (state.confirmedLocation) {
+        const confirmedNote = document.createElement("p");
+        confirmedNote.className = "suspect-confirmed-note";
+        confirmedNote.textContent = "개발자가 이 의심 위치를 확인했습니다.";
+        nodes.content.append(confirmedNote);
+      }
+    }
+
+    async function rerunLocationCandidate(bugId, candidateId, feedback) {
+      const state = window.bugPinLocationStates.get(bugId);
+      const bug = window.bugPinAnalysis?.bugs.find((item) => item.bug_id === bugId);
+      if (!state || !bug || state.searching || state.confirmedLocation) return;
+      const reasons = [...new Set(feedback.reasons || [])];
+      const freeText = (feedback.free_text || "").trim();
+      if (reasons.length === 0 && !freeText) {
+        state.searchMessage = "빠른 선택이나 다른 위치 힌트를 입력해 주세요.";
+        state.searchMessageKind = "error";
+        renderLocationState(bugId);
+        return;
+      }
+
+      let rejectedCandidate = null;
+      if (candidateId) {
+        rejectedCandidate = state.candidates.find((candidate) => candidate.candidateId === candidateId);
+        if (!rejectedCandidate) return;
+        state.pendingRejection = {
+          candidateId,
+          entry: { ...rejectedCandidate, reasons, free_text: freeText, excludedRound: state.round },
+        };
+      }
+      state.feedbackDrafts.delete(candidateId || "next-hint");
+      state.feedbackOpenFor = null;
+      state.round += 1;
+      state.searching = true;
+      state.showHintForm = false;
+      state.searchMessage = "개발자 피드백을 반영해 다른 위치를 찾고 있습니다...";
+      state.searchMessageKind = "notice";
+      renderLocationState(bugId);
+
+      const reportsById = new Map(window.bugPinReports.map((report) => [report.report_id, report]));
+      const reports = bug.report_ids.map((id) => reportsById.get(id)).filter(Boolean);
+      const body = {
+        bug,
+        reports,
+        round: state.round,
+        seen_candidates: state.seenCandidates.map((candidate) => ({ file: candidate.file, function: candidate.function })),
+        seen_files: state.mode === "github" ? [...new Set(state.reviewedFiles || [])] : [],
+        excluded: state.excluded.map((candidate) => ({
+          file: candidate.file,
+          function: candidate.function,
+          reasons: candidate.reasons,
+          free_text: candidate.free_text,
+        })).concat(state.pendingRejection ? [{
+          file: state.pendingRejection.entry.file,
+          function: state.pendingRejection.entry.function,
+          reasons: state.pendingRejection.entry.reasons,
+          free_text: state.pendingRejection.entry.free_text,
+        }] : []),
+        feedback: {
+          file: rejectedCandidate?.file || "",
+          function: rejectedCandidate?.function || "",
+          reasons,
+          free_text: freeText,
+        },
+        ...(state.mode === "github"
+          ? { connectionId: window.bugPinGitHubConnection?.connectionId }
+          : { readme: window.bugPinReadme }),
+      };
+
+      try {
+        const response = await fetch("/api/locate-again", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "다른 의심 위치를 찾지 못했습니다.");
+        if (typeof result.found !== "boolean" || !Array.isArray(result.candidates)) {
+          throw new Error("재탐색 결과 형식이 올바르지 않습니다.");
+        }
+
+        if (result.found && result.candidates.length > 0) {
+          const candidates = result.candidates.map((candidate, index) => {
+            return makeLocationCandidate({ ...candidate, source: state.mode }, state.mode, index, state.round);
+          });
+          state.candidates.push(...candidates);
+          state.seenCandidates.push(...candidates.map(({ file, function: functionName, source, round }) => ({ file, function: functionName, source, round })));
+          if (Array.isArray(result.reviewed_files)) {
+            state.reviewedFiles = [...new Set([...(state.reviewedFiles || []), ...result.reviewed_files])];
+          }
+          state.baseStatus = "candidate";
+          state.baseNote = "";
+          state.searchMessage = `${state.round}차 탐색에서 새 후보 ${candidates.length}개를 찾았습니다.`;
+          state.searchMessageKind = "notice";
+          state.showHintForm = false;
+        } else {
+          state.baseStatus = "location_unavailable";
+          state.searchMessage = result.note
+            ? `더 찾을 후보가 없어요. 위치 힌트를 조금 더 적어 주세요. ${result.note}`
+            : "더 찾을 후보가 없어요. 위치 힌트를 조금 더 적어 주세요.";
+          state.searchMessageKind = "notice";
+          state.showHintForm = true;
+        }
+        state.feedbackDrafts.delete("next-hint");
+      } catch (error) {
+        state.searchMessage = error.message || "재탐색에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+        state.searchMessageKind = "error";
+        state.showHintForm = state.candidates.length === 0;
+      } finally {
+        if (state.pendingRejection) {
+          state.candidates = state.candidates.filter((candidate) => candidate.candidateId !== state.pendingRejection.candidateId);
+          state.excluded.push(state.pendingRejection.entry);
+          state.pendingRejection = null;
+        }
+        state.searching = false;
+        renderLocationState(bugId);
+        if (state.showHintForm) nodesFocusHint(bugId);
+      }
+    }
+
+    function nodesFocusHint(bugId) {
+      window.bugPinSuspectNodes.get(bugId)?.content.querySelector('[data-feedback-input="next-hint"]')?.focus();
+    }
+
+    function renderGithubCodeAnalysis(result) {
+      const locations = new Map(result.results.map((location) => [location.bug_id, location]));
+      for (const [bugId] of window.bugPinSuspectNodes) {
+        const location = locations.get(bugId);
+        const candidates = Array.isArray(location?.candidates) ? location.candidates.filter(isVerifiedCodeCandidate) : [];
+        const missingEvidence = isVerifiedCodeCandidate(location?.missing_evidence) ? location.missing_evidence : null;
+        let status = ["location_confirmed", "location_unavailable", "code_missing_suspected"].includes(location?.status)
+          ? location.status
+          : "location_unavailable";
+        if (status === "location_confirmed" && candidates.length === 0) status = "location_unavailable";
+        if (status === "code_missing_suspected" && !missingEvidence && candidates.length === 0 && !location?.note) {
+          status = "location_unavailable";
+        }
+        const reviewedFiles = Array.isArray(location?.reviewed_files)
+          ? [...new Set(location.reviewed_files.filter((path) => typeof path === "string"))]
+          : [];
+        const state = createLocationState("github", candidates.map((candidate) => ({
+          ...candidate,
+          line: candidate.line_start === candidate.line_end ? `L${candidate.line_start}` : `L${candidate.line_start}-L${candidate.line_end}`,
+          confidence: location?.confidence || "중간",
+          reason: candidate.hypothesis,
+        })), {
+          baseStatus: status,
+          baseNote: missingEvidence
+            ? `구현 누락 의심 위치 ${missingEvidence.file}를 확인했습니다.`
+            : status === "location_unavailable" || location?.note
+              ? location?.note || "실제 코드에서 원인과 줄 번호를 확인하지 못했습니다. 추가 확인 필요."
+              : "",
+          reviewedFiles,
+        });
+        state.missingEvidence = missingEvidence;
+        window.bugPinLocationStates.set(bugId, state);
+        if (reviewedFiles.length > 0 && candidates.length > 0) {
+          const first = candidates[0];
+          first.reviewedFiles = reviewedFiles;
+        }
+        renderLocationState(bugId);
+      }
+      window.bugPinLocations = result.results;
+      setReadmeStatus("GitHub에서 가져온 실제 코드만 근거로 분석했습니다. 원본과 일치하는 코드 인용에만 줄 번호를 표시합니다.", "success");
+    }
+
+    function renderLocations(result, isTemporary) {
+      const locations = new Map(result.results.map((location) => [location.bug_id, location]));
+      for (const [bugId] of window.bugPinSuspectNodes) {
+        const location = locations.get(bugId);
+        const presentation = getReadmeLocationPresentation(location, isTemporary);
+        const candidates = presentation.candidates.map((suspect) => ({
+          file: suspect.script,
+          function: suspect.function,
+          reason: suspect.reason,
+          confidence: location?.confidence || "중간",
+          why_different: "초기 README 기반 후보",
+        }));
+        const state = createLocationState("readme", candidates, {
+          baseStatus: presentation.status === "candidate" ? "candidate" : "location_unavailable",
+          confidence: presentation.confidence,
+          note: presentation.note,
+        });
+        window.bugPinLocationStates.set(bugId, state);
+        renderLocationState(bugId);
+      }
+      window.bugPinLocations = result.results;
+      setReadmeStatus(
+        isTemporary ? "임시 샘플 결과 · 실제 AI 분석이 아닙니다. 표시된 README 후보는 예시입니다." : "README 기반 의심 후보입니다. 실제 코드 근거와 줄 번호는 확인되지 않았습니다.",
+        isTemporary ? "demo" : "success",
+      );
+    }
+
+    function buildReportList(ids, reportMap) {
+      const list = document.createElement("ul");
+      list.className = "report-list";
+      for (const id of ids) {
+        const report = reportMap.get(id);
+        if (!report) continue;
+        const item = document.createElement("li");
+        const meta = document.createElement("div");
+        meta.className = "report-meta";
+        const reportId = document.createElement("strong");
+        reportId.textContent = report.report_id;
+        const reporter = document.createElement("span");
+        reporter.textContent = report.reporter || "작성자 미상";
+        const createdAt = document.createElement("time");
+        createdAt.textContent = report.created_at || "날짜 미상";
+        meta.append(reportId, reporter, createdAt);
+        const text = document.createElement("p");
+        text.className = "report-text";
+        text.textContent = report.text;
+        item.append(meta, text);
+        list.append(item);
+      }
+      return list;
+    }
+
+    function renderAnalysis(result, isTemporary) {
+      window.bugPinSuspectNodes = new Map();
+      window.bugPinLocationStates = new Map();
+      window.bugPinLocations = null;
+      const reportMap = new Map(window.bugPinReports.map((report) => [report.report_id, report]));
+      const { bugs, not_bugs: notBugs, unclear } = normalizeAnalysisForView(result, window.bugPinReports);
+      const summaryFragment = document.createDocumentFragment();
+      const summaries = [
+        { kind: "bugs", label: "발견한 버그", count: bugs.length, note: "제보 수 많은 순으로 정렬" },
+        { kind: "opinions", label: "버그 아닌 의견", count: notBugs.length, note: "건의와 감상" },
+        { kind: "unclear", label: "확인 필요", count: unclear.length, note: "증상을 더 살펴볼 제보" },
+      ];
+      for (const item of summaries) {
+        const card = document.createElement("div");
+        card.className = "analysis-summary-card";
+        card.dataset.kind = item.kind;
+        const label = document.createElement("span");
+        label.className = "analysis-summary-label";
+        label.textContent = item.label;
+        const count = document.createElement("strong");
+        count.className = "analysis-summary-count";
+        count.textContent = String(item.count);
+        const note = document.createElement("span");
+        note.className = "analysis-summary-note";
+        note.textContent = item.note;
+        card.append(label, count, note);
+        summaryFragment.append(card);
+      }
+      analysisSummary.replaceChildren(summaryFragment);
+      analysisTempWarning.hidden = !isTemporary;
+      analysisTempWarning.replaceChildren();
+      if (isTemporary) {
+        const warning = document.createElement("strong");
+        warning.textContent = "임시 샘플 결과 · 실제 AI 분석이 아닙니다.";
+        analysisTempWarning.append(warning, document.createTextNode("화면 흐름 확인을 위한 예시입니다. 실제 버그 판정으로 사용하지 마세요."));
+      }
+
+      const resultsFragment = document.createDocumentFragment();
+      const panelSummaryEntries = [];
+      const bugsGroup = document.createElement("section");
+      bugsGroup.className = "analysis-group";
+      const bugsHeading = document.createElement("div");
+      bugsHeading.className = "analysis-group-heading";
+      const bugsTitle = document.createElement("h3");
+      bugsTitle.className = "analysis-group-title";
+      bugsTitle.textContent = "버그 묶음";
+      const bugsMeta = document.createElement("span");
+      bugsMeta.className = "analysis-group-meta";
+      bugsMeta.textContent = "제보 건수 기준 · 제목을 누르면 상세 내용을 확인할 수 있습니다";
+      bugsHeading.append(bugsTitle, bugsMeta);
+      bugsGroup.append(bugsHeading);
+
+      if (bugs.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "analysis-group-empty";
+        empty.textContent = "이번 분석에서 확인된 버그 묶음이 없습니다.";
+        bugsGroup.append(empty);
+      } else {
+        const bugCardList = document.createElement("div");
+        bugCardList.className = "bug-card-list";
+
+        bugs.forEach((bug, bugIndex) => {
+          const card = document.createElement("details");
+          card.className = "bug-card";
+          const summary = document.createElement("summary");
+          const top = document.createElement("div");
+          top.className = "bug-card-top";
+          const topLeft = document.createElement("div");
+          topLeft.className = "bug-card-top-left";
+          const rank = document.createElement("span");
+          rank.className = "bug-rank";
+          rank.textContent = String(bugIndex + 1);
+          const titleWrap = document.createElement("div");
+          titleWrap.className = "bug-card-title-wrap";
+          const title = document.createElement("h4");
+          title.className = "bug-card-title";
+          title.textContent = bug.title;
+          titleWrap.append(title);
+          topLeft.append(rank, titleWrap);
+          const count = document.createElement("span");
+          count.className = "bug-card-count";
+          count.textContent = `제보 ${bug.report_ids.length}건`;
+          top.append(topLeft, count);
+          const symptom = document.createElement("p");
+          symptom.className = "bug-card-symptom";
+          symptom.textContent = bug.symptom;
+          summary.append(top, symptom);
+
+          const detail = document.createElement("div");
+          detail.className = "bug-card-detail";
+          const coreSection = document.createElement("section");
+          coreSection.className = "bug-detail-section";
+          const coreHeading = document.createElement("h5");
+          coreHeading.className = "bug-detail-heading";
+          coreHeading.textContent = "핵심 증상";
+          const coreText = document.createElement("p");
+          coreText.className = "bug-core-symptom";
+          coreText.textContent = bug.symptom;
+          coreSection.append(coreHeading, coreText);
+          detail.append(coreSection);
+
+          const reportSection = document.createElement("section");
+          reportSection.className = "bug-detail-section";
+          const reportHeading = document.createElement("h5");
+          reportHeading.className = "bug-detail-heading";
+          const representativeIds = bug.report_ids.slice(0, Math.min(2, bug.report_ids.length));
+          reportHeading.textContent = `대표 제보 ${representativeIds.length}건 / 전체 ${bug.report_ids.length}건`;
+          reportSection.append(reportHeading, buildReportList(representativeIds, reportMap));
+
+          const remainingIds = bug.report_ids.slice(representativeIds.length);
+          if (remainingIds.length > 0) {
+            const remaining = document.createElement("details");
+            remaining.className = "more-reports";
+            const remainingSummary = document.createElement("summary");
+            remainingSummary.textContent = `나머지 제보 펼쳐보기 · ${remainingIds.length}건`;
+            remaining.append(remainingSummary, buildReportList(remainingIds, reportMap));
+            reportSection.append(remaining);
+          }
+          detail.append(reportSection);
+
+          const suspectArea = document.createElement("section");
+          suspectArea.className = "suspect-location";
+          const suspectHeader = document.createElement("div");
+          suspectHeader.className = "suspect-header";
+          const suspectLabel = document.createElement("h5");
+          suspectLabel.className = "suspect-label";
+          suspectLabel.textContent = "의심 위치";
+          const confidence = document.createElement("span");
+          confidence.className = "suspect-confidence";
+          const initialLocationState = createLocationState(window.bugPinGitHubConnection ? "github" : "readme");
+          const initialStatus = getSuspectStatusPresentation("unanalysed");
+          confidence.textContent = initialStatus.label;
+          confidence.dataset.status = initialStatus.kind;
+          suspectHeader.append(suspectLabel, confidence);
+          const suspectContent = document.createElement("div");
+          suspectContent.className = "suspect-content";
+          const suspectEmpty = document.createElement("p");
+          suspectEmpty.className = "suspect-empty";
+          suspectEmpty.textContent = window.bugPinGitHubConnection
+            ? "GitHub의 실제 C# 코드 분석을 시작하면 파일과 코드 근거가 표시됩니다."
+            : window.bugPinReadme
+              ? "README 분석은 기능 설명으로 후보를 추정하며, 실제 코드와 줄 번호는 확인하지 않습니다."
+              : "README를 올리거나 GitHub 저장소를 연결한 뒤 의심 위치를 확인할 수 있습니다.";
+          suspectContent.append(suspectEmpty);
+          suspectArea.append(suspectHeader, suspectContent);
+          window.bugPinSuspectNodes.set(bug.bug_id, { bugId: bug.bug_id, confidence, content: suspectContent });
+          window.bugPinLocationStates.set(bug.bug_id, initialLocationState);
+          detail.append(suspectArea);
+          card.append(summary, detail);
+          bugCardList.append(card);
+          panelSummaryEntries.push({
+            kind: "bug",
+            number: bugIndex + 1,
+            title: bug.title,
+            count: bug.report_ids.length,
+            target: card,
+          });
+        });
+        bugsGroup.append(bugCardList);
+      }
+      resultsFragment.append(bugsGroup);
+
+      function appendReviewGroup(kind, titleText, count, ids, emptyText) {
+        const group = document.createElement("section");
+        group.className = `analysis-group ${kind === "opinions" ? "analysis-group-opinions" : "analysis-group-unclear"}`;
+        let target = group;
+        const heading = document.createElement("div");
+        heading.className = "analysis-group-heading";
+        const title = document.createElement("h3");
+        title.className = "analysis-group-title";
+        title.textContent = titleText;
+        const meta = document.createElement("span");
+        meta.className = "analysis-group-meta";
+        meta.textContent = `${count}건`;
+        heading.append(title, meta);
+        group.append(heading);
+
+        if (ids.length > 0) {
+          const details = document.createElement("details");
+          details.className = kind === "opinions" ? "not-bugs-card" : "unclear-card";
+          const summary = document.createElement("summary");
+          summary.textContent = `${titleText} ${count}건 펼쳐보기`;
+          details.append(summary, buildReportList(ids, reportMap));
+          group.append(details);
+          target = details;
+        } else {
+          const empty = document.createElement("p");
+          empty.className = "analysis-group-empty";
+          empty.textContent = emptyText;
+          group.append(empty);
+        }
+        resultsFragment.append(group);
+        return target;
+      }
+
+      const opinionsTarget = appendReviewGroup("opinions", "버그가 아닌 의견", notBugs.length, notBugs, "버그가 아닌 의견이 없습니다.");
+      panelSummaryEntries.push({ kind: "opinions", title: "버그가 아닌 의견", count: notBugs.length, target: opinionsTarget });
+      const unclearTarget = appendReviewGroup("unclear", "확인 필요", unclear.length, unclear, "추가 확인이 필요한 제보가 없습니다.");
+      panelSummaryEntries.push({ kind: "unclear", title: "확인 필요", count: unclear.length, target: unclearTarget });
+
+      window.bugPinAnalysis = { bugs, not_bugs: notBugs, unclear };
+      locateSuspectsButton.disabled = bugs.length === 0;
+      locateSuspectsButton.textContent = window.bugPinGitHubConnection
+        ? "GitHub 실제 코드로 분석"
+        : window.bugPinReadme
+          ? "README 후보 분석"
+          : "의심 위치 찾기";
+      analysisResults.replaceChildren(resultsFragment);
+      renderPanelSummary(panelSummaryEntries);
+      analysisOutput.hidden = false;
+      bugCount.textContent = `${bugs.length} BUGS`;
+      emptyState.hidden = true;
+      setAnalysisStatus(
+        isTemporary ? "임시 샘플 결과입니다. 실제 AI 분석이 아닙니다. 실제 제보 분석에는 LLM 설정이 필요합니다." : "AI 분석이 완료되었습니다.",
+        isTemporary ? "demo" : "success",
+      );
+      if (window.bugPinGitHubConnection || window.bugPinReadme) setReadmeStatus("버그 분석이 준비됐습니다. 실제 GitHub 코드 분석을 권장합니다.");
+    }
+
+    analyzeButton.addEventListener("click", async () => {
+      if (window.bugPinReports.length === 0) {
+        setAnalysisStatus("먼저 제보 CSV를 올려 주세요.", "error");
+        return;
+      }
+      analyzeButton.disabled = true;
+      analyzeButton.textContent = "분석 중...";
+      window.bugPinAnalysis = null;
+      window.bugPinLocations = null;
+      window.bugPinSuspectNodes = new Map();
+      locateSuspectsButton.disabled = true;
+      setPanelSummaryPlaceholder("분석 중입니다. 제보를 비교하고 있어요...");
+      analysisOutput.hidden = true;
+      analysisSummary.replaceChildren();
+      analysisResults.replaceChildren();
+      analysisTempWarning.hidden = true;
+      analysisFailure.hidden = true;
+      setAnalysisStatus(`제보 ${window.bugPinReports.length}건을 분석하고 있습니다. 잠시 기다려 주세요.`, "loading");
+      try {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reports: window.bugPinReports }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "AI 분석에 실패했습니다. 다시 시도해 주세요.");
+        if (!Array.isArray(result.bugs) || !Array.isArray(result.not_bugs) || !Array.isArray(result.unclear)) {
+          throw new Error("분석 결과 형식이 올바르지 않습니다. 다시 시도해 주세요.");
+        }
+        renderAnalysis(result, response.headers.get("x-bugpin-demo") === "temporary");
+      } catch (error) {
+        const message = error.message || "AI 분석에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+        setAnalysisStatus(message, "error");
+        setPanelSummaryPlaceholder("분석에 실패했습니다. 제보는 유지되어 있으며 다시 시도할 수 있습니다.");
+        analysisFailure.textContent = `분석을 완료하지 못했습니다. ${message} 제보 데이터는 유지되어 있으니 다시 시도할 수 있습니다.`;
+        analysisFailure.hidden = false;
+        analysisOutput.hidden = false;
+      } finally {
+        analyzeButton.disabled = false;
+        analyzeButton.textContent = "분석 다시 시작";
+      }
+    });
+
+    function importReadme(text, filename) {
+      if (!filename.toLowerCase().endsWith(".md")) {
+        window.bugPinReadme = "";
+        updateProjectContextReadyState();
+        updateLocationButton();
+        readmeFileName.textContent = "README.md를 선택해 주세요";
+        readmeFileHint.textContent = "스크립트 목록과 기능 설명이 담긴 파일";
+        resetSuspectCards("README를 올리면 의심 위치를 확인할 수 있습니다.");
+        setReadmeStatus(".md 형식의 README 파일을 선택해 주세요.", "error");
+        return;
+      }
+      const content = text.replace(/^\uFEFF/, "");
+      if (!content.trim()) {
+        window.bugPinReadme = "";
+        updateProjectContextReadyState();
+        updateLocationButton();
+        readmeFileName.textContent = "README.md를 선택해 주세요";
+        readmeFileHint.textContent = "스크립트 목록과 기능 설명이 담긴 파일";
+        resetSuspectCards("README를 올리면 의심 위치를 확인할 수 있습니다.");
+        setReadmeStatus("README 파일이 비어 있습니다. 스크립트 이름과 기능 설명이 있는 .md 파일을 올려 주세요.", "error");
+        return;
+      }
+
+      window.bugPinReadme = content;
+      updateProjectContextReadyState();
+      readmeFileName.textContent = filename;
+      readmeFileHint.textContent = `${content.length.toLocaleString("ko-KR")}자 · Markdown`;
+      resetSuspectCards("새 README로 의심 위치 분석을 다시 해 주세요.");
+      updateLocationButton();
+      setReadmeStatus(window.bugPinAnalysis
+        ? "README가 준비됐습니다. 의심 위치를 찾아보세요."
+        : "README를 불러왔습니다. 제보 분석 후 의심 위치를 찾을 수 있습니다.");
+    }
+
+    async function readReadmeFile(file) {
+      if (!file) return;
+      try {
+        importReadme(await file.text(), file.name);
+      } catch {
+        window.bugPinReadme = "";
+        updateProjectContextReadyState();
+        updateLocationButton();
+        setReadmeStatus("README를 읽지 못했습니다. Markdown 파일인지 확인해 주세요.", "error");
+      }
+    }
+
+    chooseReadmeButton.addEventListener("click", () => readmeInput.click());
+    readmeInput.addEventListener("change", () => {
+      readReadmeFile(readmeInput.files[0]);
+      readmeInput.value = "";
+    });
+    loadSampleReadmeButton.addEventListener("click", async () => {
+      loadSampleReadmeButton.disabled = true;
+      loadSampleReadmeButton.textContent = "불러오는 중...";
+      try {
+        const response = await fetch("/sample_README.md");
+        if (!response.ok) throw new Error("sample-readme-unavailable");
+        importReadme(await response.text(), "sample_README.md");
+      } catch {
+        setReadmeStatus("샘플 README를 불러오지 못했습니다. 다시 시도해 주세요.", "error");
+      } finally {
+        loadSampleReadmeButton.disabled = false;
+        loadSampleReadmeButton.textContent = "샘플 README 불러오기";
+      }
+    });
+    readmeDropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      readmeDropzone.dataset.dragging = "true";
+    });
+    readmeDropzone.addEventListener("dragleave", (event) => {
+      if (!readmeDropzone.contains(event.relatedTarget)) delete readmeDropzone.dataset.dragging;
+    });
+    readmeDropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      delete readmeDropzone.dataset.dragging;
+      readReadmeFile(event.dataTransfer.files[0]);
+    });
+
+    function setGithubStatus(message, kind = "success") {
+      githubStatus.textContent = message;
+      githubStatus.dataset.kind = kind;
+      githubStatus.hidden = false;
+    }
+
+    function clearGithubConnection() {
+      githubFileRequestVersion += 1;
+      window.bugPinGitHubConnection = null;
+      githubRepoSummary.hidden = true;
+      githubFileBrowser.hidden = true;
+      githubTreeNote.hidden = true;
+      githubCodePreview.hidden = true;
+      githubRepoName.textContent = "";
+      githubRepoBranch.textContent = "";
+      githubFileCount.textContent = "";
+      githubFilesList.replaceChildren();
+      githubCodePath.textContent = "";
+      githubCodeLines.textContent = "";
+      githubCodeContent.textContent = "";
+      updateProjectContextReadyState();
+      resetSuspectCards(window.bugPinReadme
+        ? "README만으로는 실제 코드 줄을 확인할 수 없습니다. README 후보 분석을 다시 하거나 GitHub를 연결해 주세요."
+        : "GitHub 저장소를 연결하면 실제 코드 근거와 줄 번호를 확인할 수 있습니다.");
+      updateLocationButton();
+    }
+
+    function formatFileSize(size) {
+      if (size === null || !Number.isFinite(size)) return "크기 확인 불가";
+      if (size < 1024) return `${size} B`;
+      return `${(size / 1024).toFixed(1)} KB`;
+    }
+
+    async function readGithubCodeFile(file, button) {
+      const connection = window.bugPinGitHubConnection;
+      if (!connection) {
+        setGithubStatus("먼저 GitHub 저장소를 연결해 주세요.", "error");
+        return;
+      }
+
+      const requestVersion = ++githubFileRequestVersion;
+      githubCodePreview.hidden = true;
+      for (const fileButton of githubFilesList.querySelectorAll(".github-file-button")) {
+        fileButton.setAttribute("aria-pressed", String(fileButton === button));
+      }
+      setGithubStatus(`${file.path} 파일 내용을 서버에서 가져오는 중입니다...`);
+
+      try {
+        const response = await fetch("/api/github/file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ connectionId: connection.connectionId, path: file.path }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "GitHub 파일을 가져오지 못했습니다.");
+        if (requestVersion !== githubFileRequestVersion) return;
+
+        githubCodePath.textContent = result.path;
+        githubCodeLines.textContent = `${result.lineCount}줄 · ${formatFileSize(result.size)}`;
+        githubCodeContent.textContent = result.content;
+        githubCodePreview.hidden = false;
+        setGithubStatus(`${result.path} 실제 파일을 서버에서 읽었습니다.`, "success");
+      } catch (error) {
+        if (requestVersion === githubFileRequestVersion) {
+          setGithubStatus(error.message || "GitHub 파일을 가져오지 못했습니다.", "error");
+        }
+      }
+    }
+
+    function renderGithubFiles(connection) {
+      const fragment = document.createDocumentFragment();
+      if (connection.files.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "github-file-item";
+        empty.textContent = "저장소에서 .cs 파일을 찾지 못했습니다.";
+        fragment.append(empty);
+      }
+
+      for (const file of connection.files) {
+        const item = document.createElement("li");
+        item.className = "github-file-item";
+        const button = document.createElement("button");
+        button.className = "github-file-button";
+        button.type = "button";
+        button.textContent = file.path;
+        button.title = file.path;
+        button.setAttribute("aria-pressed", "false");
+        button.disabled = file.tooLarge || file.size === null;
+        if (file.tooLarge) button.title = `${file.path} · 300KB보다 커서 미리보기에서 열 수 없습니다.`;
+        if (file.size === null) button.title = `${file.path} · 파일 크기를 확인할 수 없어 열 수 없습니다.`;
+        button.addEventListener("click", () => readGithubCodeFile(file, button));
+
+        const size = document.createElement("span");
+        size.className = "github-file-size";
+        size.textContent = formatFileSize(file.size);
+        item.append(button, size);
+        fragment.append(item);
+      }
+
+      githubFilesList.replaceChildren(fragment);
+      githubFilesSummary.textContent = `C# 파일 목록 · ${connection.files.length}${connection.fileListTruncated ? "+" : ""}개 표시`;
+      githubFileBrowser.hidden = false;
+      githubFileBrowser.open = false;
+      if (connection.fileListTruncated) {
+        githubTreeNote.textContent = "저장소 파일 구조가 GitHub 응답 제한에 걸렸거나 목록이 많아 일부 C# 파일만 표시합니다.";
+        githubTreeNote.hidden = false;
+      }
+    }
+
+    githubConnectForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const repoUrl = githubUrlInput.value.trim();
+      if (!repoUrl) {
+        setGithubStatus("GitHub 저장소 주소를 입력해 주세요.", "error");
+        return;
+      }
+
+      clearGithubConnection();
+      githubConnectButton.disabled = true;
+      githubConnectButton.textContent = "확인 중";
+      setGithubStatus("GitHub에서 저장소, 브랜치, C# 파일 목록을 확인하고 있습니다...");
+      try {
+        const response = await fetch("/api/github/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repoUrl }),
+        });
+        const connection = await response.json();
+        if (!response.ok) throw new Error(connection.error || "GitHub 저장소에 연결하지 못했습니다.");
+
+        window.bugPinGitHubConnection = connection;
+        updateProjectContextReadyState();
+        githubRepoName.textContent = connection.fullName;
+        githubRepoBranch.textContent = `브랜치 · ${connection.branch}`;
+        githubFileCount.textContent = `${connection.fileCount}개 C#`;
+        githubRepoSummary.hidden = false;
+        renderGithubFiles(connection);
+        updateLocationButton();
+        setGithubStatus(`${connection.fullName} 저장소 연결 성공 · ${connection.branch} 브랜치 · C# 파일 ${connection.fileCount}개`, "success");
+      } catch (error) {
+        clearGithubConnection();
+        setGithubStatus(error.message || "GitHub 저장소에 연결하지 못했습니다.", "error");
+      } finally {
+        githubConnectButton.disabled = false;
+        githubConnectButton.textContent = "연결";
+      }
+    });
+
+    locateSuspectsButton.addEventListener("click", async () => {
+      if (!window.bugPinAnalysis || window.bugPinAnalysis.bugs.length === 0) {
+        setReadmeStatus("먼저 제보 CSV를 올리고 분석을 시작해 주세요.", "error");
+        return;
+      }
+      const connection = window.bugPinGitHubConnection;
+      if (!connection && !window.bugPinReadme.trim()) {
+        setReadmeStatus("실제 코드 분석에는 GitHub 저장소를 연결해 주세요. README만 분석하려면 README.md를 올릴 수 있습니다.", "error");
+        return;
+      }
+
+      locateSuspectsButton.disabled = true;
+      locateSuspectsButton.textContent = connection ? "GitHub 코드 분석 중..." : "README 후보 분석 중...";
+      setSuspectCardsAnalyzing(connection
+        ? "연결된 저장소의 실제 C# 코드에서 관련 부분을 찾고 있습니다."
+        : "README 기능 설명을 비교해 의심 후보를 정리하고 있습니다.");
+      setReadmeStatus(connection
+        ? "연결된 저장소에서 관련 C# 파일만 골라 실제 코드를 확인하고 있습니다."
+        : "README의 기능 설명을 비교합니다. 실제 코드와 줄 번호는 확인되지 않습니다.", "loading");
+      try {
+        const response = await fetch(connection ? "/api/github/analyze-code" : "/api/locate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(connection
+            ? { connectionId: connection.connectionId, bugs: window.bugPinAnalysis.bugs }
+            : { bugs: window.bugPinAnalysis.bugs, readme: window.bugPinReadme }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "의심 위치 분석에 실패했습니다. 다시 시도해 주세요.");
+        if (!Array.isArray(result.results)) throw new Error("의심 위치 결과 형식이 올바르지 않습니다.");
+        if (connection) renderGithubCodeAnalysis(result);
+        else renderLocations(result, response.headers.get("x-bugpin-demo") === "temporary");
+      } catch (error) {
+        const message = error.message || "의심 위치 분석에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+        setSuspectCardsUnavailable(`분석에 실패했습니다: ${message}`);
+        setReadmeStatus(message, "error");
+      } finally {
+        updateLocationButton();
+      }
+    });
+
+    async function readReportFile(file) {
+      if (!file || file.size === 0) {
+        showUploadError(new Error("empty-file"));
+        return;
+      }
+      try {
+        const bytes = await file.arrayBuffer();
+        let csv;
+        try {
+          csv = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch {
+          csv = new TextDecoder("euc-kr", { fatal: true }).decode(bytes);
+        }
+        importCsv(csv);
+      } catch (error) {
+        showUploadError(error);
+      }
+    }
+
+    chooseFileButton.addEventListener("click", () => reportInput.click());
+    reportInput.addEventListener("change", () => {
+      readReportFile(reportInput.files[0]);
+      reportInput.value = "";
+    });
+    loadSampleButton.addEventListener("click", async () => {
+      loadSampleButton.disabled = true;
+      loadSampleButton.textContent = "불러오는 중...";
+      try {
+        const response = await fetch("sample_reports.csv");
+        if (!response.ok) throw new Error("sample-unavailable");
+        importCsv(await response.text());
+      } catch (error) {
+        showUploadError(error.message === "sample-unavailable" ? error : new Error("sample-unavailable"));
+      } finally {
+        loadSampleButton.disabled = false;
+        loadSampleButton.textContent = "샘플 20건 불러오기";
+      }
+    });
+
+    dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.dataset.dragging = "true";
+    });
+    dropzone.addEventListener("dragleave", (event) => {
+      if (!dropzone.contains(event.relatedTarget)) delete dropzone.dataset.dragging;
+    });
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      delete dropzone.dataset.dragging;
+      readReportFile(event.dataTransfer.files[0]);
+    });
+  </script>
+</body>
+</html>

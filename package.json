@@ -1,0 +1,14 @@
+{
+  "name": "bugpin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env server.js",
+    "start": "node --env-file-if-exists=.env server.js",
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js",
+    "test:e2e": "node --test test/e2e/*.test.js",
+    "test": "npm run test:unit && npm run test:integration && npm run test:e2e"
+  }
+}
