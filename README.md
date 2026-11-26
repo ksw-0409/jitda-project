@@ -7,8 +7,8 @@ BugPin은 게임 QA 제보 정리와 버그 위치 추적을 돕는 게임 QA �
 1. 제보 CSV를 올리면 짓다 플랫폼의 `jitda-chat`이 중복 제보를 버그 묶음으로 정리합니다.
 2. 프로젝트 README 또는 GitHub 저장소를 연결하면 버그마다 의심 스크립트와 함수를 제안합니다.
 3. GitHub 코드 분석에서는 실제 코드 인용과 줄 번호를 확인하고, 후보가 맞지 않으면 개발자 피드백을 반영해 다른 위치를 다시 찾습니다.
-4. 위치를 확정한 뒤 담당자·마감일·우선순위·메모가 있는 수정 계획을 저장하고 JSON으로 내보낼 수 있습니다.
-5. 팀 전용 환경에서는 지정한 Notion 페이지의 Markdown 본문을 README로 불러와 같은 위치 분석 흐름에 사용할 수 있습니다.
+4. 위치를 확정한 뒤 담당자·마감일·우선순위·메모가 있는 수정 계획을 저장하고 JSON으로 내보내거나 설정된 Notion DB에 등록할 수 있습니다.
+5. 지정한 Notion 페이지의 Markdown 본문을 README로 불러와 같은 위치 분석 흐름에 사용할 수 있습니다.
 
 AI 부트캠프 팀 프로젝트입니다. 짓다 플랫폼의 바이브 코딩 환경과 짓다 제공 LLM으로 만들었습니다.
 
@@ -39,7 +39,7 @@ AI 부트캠프 팀 프로젝트입니다. 짓다 플랫폼의 바이브 코딩 
 | GitHub 코드 기반 의심 위치 | 저장소의 C# 코드를 읽고 관련 코드 후보, 실제 파일·함수·줄, 코드 인용, 확인된 사실과 원인 추정을 구분해 표시합니다. GitHub 접근은 읽기 전용입니다. |
 | 개발자 피드백 재탐색 | 후보별 또는 전체 후보에 “여기 아님” 사유와 힌트를 남기면, 이미 검토하거나 제외한 위치를 피해서 다시 탐색합니다. 새 후보는 `2차 탐색`, `3차 탐색`처럼 표시합니다. |
 | 후보 선택·확정 | 후보가 여러 개면 신뢰도 높은 순으로 선택할 수 있습니다. 여러 위치를 함께 선택할 수도 있으며, 확정 위치를 버그 카드에 표시합니다. |
-| 수정 계획 | 확정 위치마다 담당자·마감일·우선순위·메모를 저장합니다. 마감일 기준 D-day를 보여 주고 계획 JSON을 다운로드할 수 있습니다. |
+| 수정 계획 | 확정 위치마다 담당자·마감일·우선순위·메모를 저장합니다. Notion DB를 설정하면 같은 버그 카드를 생성·갱신하고 JSON으로 내보낼 수 있습니다. |
 
 ## 이용 흐름
 
@@ -115,6 +115,7 @@ npm run dev
 | `GITHUB_TOKEN` | 선택 | 비공개 저장소 접근이나 GitHub API 한도 확대에 사용합니다. 공개 저장소는 토큰 없이도 조회할 수 있습니다. 저장소 읽기 권한만 부여하세요. |
 | `NOTION_TOKEN` | Notion 기능 사용 시 필수 | Notion internal integration 토큰입니다. 서버에서만 사용합니다. |
 | `NOTION_PAGE_ID` | Notion 기능 사용 시 필수 | README 본문을 가져올 Notion 일반 페이지 한 개의 ID입니다. |
+| `NOTION_PLAN_DATABASE_ID` | Notion 수정계획 등록 시 필수 | 수정 계획 카드를 저장할 Notion 데이터베이스 ID 또는 링크입니다. 서버 시작 시 data source와 속성 스키마를 확인합니다. |
 | `PORT` | 선택 | 서버 포트입니다. 기본값은 `3000`입니다. |
 
 ```dotenv
@@ -123,6 +124,7 @@ LLM_BASE_URL=
 GITHUB_TOKEN=
 NOTION_TOKEN=
 NOTION_PAGE_ID=
+NOTION_PLAN_DATABASE_ID=
 # PORT=3000
 ```
 
@@ -174,6 +176,25 @@ Notion README 불러오기는 서버 환경 변수로 지정한 일반 페이지
 
 Notion API 응답에 Markdown 본문이 비어 있으면 422, integration 인증이 잘못되면 401, 페이지 공유 권한이 없으면 403, 페이지 ID를 찾지 못하면 404로 안내합니다. 실패한 경우 화면에 이미 불러온 README 본문은 유지됩니다.
 
+### Notion 수정 계획 데이터베이스
+
+1. Notion에 아래 속성 이름과 형식으로 데이터베이스를 만듭니다.
+2. `우선순위` 선택지에 `높음`, `보통`, `낮음`; `상태` 선택지에 `계획됨`, `보류`, `완료`를 추가합니다.
+3. `NOTION_PLAN_DATABASE_ID`에 데이터베이스 링크 전체 또는 32자리 ID를 입력합니다. 서버가 시작할 때 데이터베이스의 data source ID와 스키마를 조회합니다.
+4. 같은 `NOTION_TOKEN` integration을 페이지와 데이터베이스에 공유하고 페이지 생성·편집 권한을 부여합니다.
+
+| 속성 이름 | Notion 속성 형식 |
+|---|---|
+| 버그 | 제목(title) |
+| 담당자 | 선택(select) |
+| 마감일, 등록일 | 날짜(date) |
+| 우선순위, 상태 | 선택(select) |
+| 위치, 파일, 함수, 줄, 메모, 버그 ID | 텍스트(rich text) |
+
+어느 이름이나 형식이 다르면 `/api/notion/plan`은 스키마 오류를 반환하고 계획을 등록하지 않습니다. 실제 `NOTION_PLAN_DATABASE_ID`는 짓다 서버 환경 변수 설정에서 등록합니다. 데이터베이스 ID는 브라우저에 보내지지 않습니다.
+
+`NOTION_PLAN_DATABASE_ID`를 등록하지 않으면 Notion 카드 쓰기 기능만 비활성 상태이며, 수정 계획은 브라우저 로컬에 저장할 수 있습니다. 실제 카드 생성을 테스트하려면 팀의 실제 DB ID와 쓰기 권한이 있는 Notion integration이 필요합니다.
+
 ### GitHub 저장소
 
 공개 저장소 또는 서버 토큰이 접근할 수 있는 비공개 저장소 주소를 입력합니다.
@@ -187,7 +208,7 @@ https://github.com/<owner>/<repo>/tree/<branch>
 
 ## API
 
-분석·GitHub API는 같은 출처의 `POST` JSON 요청입니다. Notion 본문 API는 `GET`입니다. 실제 구현에는 CORS를 열어 두지 않았습니다.
+분석·GitHub API는 같은 출처의 `POST` JSON 요청입니다. Notion README 본문은 `GET`, 계획 동기화는 `POST`입니다. 실제 구현에는 CORS를 열어 두지 않았습니다.
 
 | 엔드포인트 | 역할 | 주요 요청 필드 |
 |---|---|---|
@@ -198,6 +219,7 @@ https://github.com/<owner>/<repo>/tree/<branch>
 | `/api/github/analyze-code` | 실제 GitHub 코드 기반 위치 분석 | `connectionId`, `bugs` |
 | `/api/locate-again` | 개발자 피드백을 반영해 다른 후보 재탐색 | `bug`, `reports`, `feedback`, `excluded`, `seen_candidates`, `round`, `readme` 또는 `connectionId`; GitHub에서는 선택적으로 `seen_files` · `POST` |
 | `/api/notion/readme` | 설정된 Notion 페이지의 Markdown 본문 가져오기 | 서버 환경 변수 `NOTION_TOKEN`, `NOTION_PAGE_ID` · `GET` |
+| `/api/notion/plan` | 수정 계획 카드 생성 또는 같은 버그 카드 갱신 | `plan`, `cause_hypothesis`, `code_candidates`, `reports`, 선택적 `notion_page_id` · `POST` |
 
 ### `/api/analyze`
 
@@ -273,7 +295,7 @@ Notion-Version: 2026-03-11
 
 ## 수정 계획 데이터와 저장
 
-계획은 서버나 외부 서비스로 전송하지 않습니다. 현재 브라우저의 `localStorage`에 다음 형태로 저장하고, 새로고침 후 같은 브라우저와 출처에서 다시 읽습니다.
+수정 계획은 먼저 브라우저 `localStorage`에 다음 형태로 저장합니다. 서버에 `NOTION_PLAN_DATABASE_ID`와 `NOTION_TOKEN`이 있고 데이터베이스 스키마가 맞으면 같은 저장 동작에서 `/api/notion/plan`으로 Notion에도 등록합니다. 같은 버그의 기존 페이지 ID가 있으면 해당 카드를 수정하고, 없으면 `버그 ID` 열을 검색합니다. Notion 전송이 실패해도 로컬 계획은 남고 카드에 이유와 재시도 버튼을 표시합니다.
 
 ```json
 {
@@ -296,10 +318,10 @@ Notion-Version: 2026-03-11
 
 - 우선순위 값: `high`, `medium`, `low`
 - 상태 값: `planned`, `on_hold`, `done`. 현재 화면은 위치를 다시 선택하는 동안 `on_hold`를 사용합니다. `done` 값은 이후 상태 연동을 위한 스키마 값이며, 완료 처리 UI는 아직 없습니다.
-- 저장 키: `bugpin.fix-plans.v1`; 담당자 자동완성 이름은 `bugpin.fix-plan-assignees.v1`에 별도로 저장합니다.
+- 저장 키: `bugpin.fix-plans.v1`; 담당자 자동완성은 `bugpin.fix-plan-assignees.v1`, Notion 카드 ID와 링크는 `bugpin.fix-plan-notion-pages.v1`에 별도로 저장합니다. canonical 계획 객체에는 Notion 전용 필드를 섞지 않습니다.
 - 버그 카드의 마감일/우선순위 정렬은 계획이 있는 항목을 우선 표시하며, 계획이 없는 버그의 기존 제보 건수 순서는 유지합니다.
 - “수정 계획 JSON 내보내기” 버튼은 저장된 계획 전체를 `bugpin-fix-plans.json`으로 다운로드합니다.
-- 브라우저 저장 공간을 지우거나 다른 브라우저·기기에서 열면 계획이 공유되지 않습니다. 서버 백업이나 Notion 연동은 없습니다.
+- 브라우저 저장 공간을 지우거나 다른 브라우저·기기에서 열면 로컬 계획/페이지 링크 캐시는 공유되지 않습니다. 다음 저장 때 서버는 `버그 ID` 속성을 검색해 기존 카드를 찾아 갱신합니다.
 
 ## 프로젝트 구조
 
@@ -308,7 +330,7 @@ Notion-Version: 2026-03-11
 ├── README.md
 ├── index.html                 # 업로드, 결과·후보·수정 계획 화면
 ├── server.js                  # 정적 파일/API 서버, 짓다 LLM·읽기 전용 GitHub 연동,
-│                              # 팀 전용 Notion Markdown 본문 읽기
+│                              # Notion README 읽기와 수정 계획 DB 동기화
 ├── analysis-view-model.js     # CSV 파싱 및 화면용 분석 결과 정리
 ├── fix-plan-model.js          # 수정 계획 날짜·검증·마감일·JSON 모델
 ├── package.json               # dev/start 및 테스트 명령
@@ -353,16 +375,17 @@ E2E는 브라우저에서 CSV 불러오기, 분석, 버그/원문 펼치기, REA
 - 버그 그룹화와 원인 분석은 AI 보조입니다. 최종 버그 판정과 수정 책임은 개발자에게 있습니다.
 - README 방식은 기능 설명에서 후보를 추정할 뿐 실제 코드 내용이나 줄 번호를 확인하지 않습니다.
 - GitHub 코드 분석은 C# 파일 중심의 제한된 후보 검색입니다. 저장소 전체에서 모든 가능한 경로를 증명하는 정적 분석기는 아닙니다.
-- 수정 계획은 브라우저 로컬 데이터이며 사용자 간 동기화·서버 백업이 없습니다.
+- 수정 계획은 브라우저 로컬에 저장되며, `NOTION_PLAN_DATABASE_ID`를 설정하면 Notion 데이터베이스에도 동기화합니다. 사용자 계정 간 BugPin 자체 계획 동기화는 없습니다.
 - 데모 fallback은 제공된 정확한 샘플 데이터에만 대응하고, 화면에 임시 결과임을 표시합니다.
 
 ### 다음 계획
 
 - [ ] 여러 사용자 간 수정 계획 공유를 위한 저장소/권한 설계
 - [ ] 수정 완료 상태(`done`)를 설정하고 변경 이력을 남기는 UI
-- [ ] 요청이 있을 때 Notion 또는 이슈 관리 도구로 계획을 내보내는 연동
+- [ ] Notion 카드의 상태/편집 내용을 BugPin에 다시 동기화
+- [ ] 이슈 관리 도구 연동
 
-현재 프로젝트에는 수정 계획을 Notion에 보내는 연동 버튼이나 외부 수정 API가 없습니다. Notion 기능은 README 본문을 읽어 오는 용도만 지원합니다.
+수정 계획 Notion 동기화는 `NOTION_PLAN_DATABASE_ID`를 설정한 경우에 사용할 수 있습니다. README 불러오기와 계획 카드 쓰기는 각각 별도의 기능입니다.
 
 ## 팀
 

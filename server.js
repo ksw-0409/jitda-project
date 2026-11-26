@@ -15,6 +15,34 @@ const maxGithubBugsForAnalysis = 30;
 const maxCodeExcerptCharsPerFile = 3600;
 const githubConnectionTtlMs = 30 * 60 * 1000;
 const githubConnections = new Map();
+const notionPlanRateLimits = new Map();
+const notionPlanRateWindowMs = 60_000;
+const notionPlanRateLimit = 10;
+const notionPlanRateLimitMaxIps = 10_000;
+const notionPlanDatabaseId = normalizeNotionPageId(process.env.NOTION_PLAN_DATABASE_ID || "");
+const notionPlanSchemaRequirements = Object.freeze({
+  "버그": "title",
+  "담당자": "select",
+  "마감일": "date",
+  "등록일": "date",
+  "우선순위": "select",
+  "상태": "select",
+  "위치": "rich_text",
+  "파일": "rich_text",
+  "함수": "rich_text",
+  "줄": "rich_text",
+  "메모": "rich_text",
+  "버그 ID": "rich_text",
+});
+const notionPlanDatabaseState = {
+  configured: false,
+  initialized: false,
+  databaseId: "",
+  dataSourceId: "",
+  properties: null,
+  error: "",
+  errorStatus: 0,
+};
 const staticFiles = new Map([
   ["/", "index.html"],
   ["/index.html", "index.html"],
@@ -107,6 +135,820 @@ function normalizeNotionPageId(value) {
   const hex = id.replace(/-/g, "").toLowerCase();
   if (!/^[0-9a-f]{32}$/.test(hex)) return null;
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function getNotionApiUrl(path) {
+  const testOverride = process.env.NODE_ENV === "test" ? process.env.NOTION_API_BASE_URL?.trim() : "";
+  const base = testOverride || "https://api.notion.com";
+  let url;
+  try {
+    url = new URL(base);
+  } catch {
+    throw new HttpError(500, "Notion API 주소 설정이 올바르지 않습니다.");
+  }
+  if (testOverride) {
+    const testLoopback = ["127.0.0.1", "localhost", "::1"].includes(url.hostname);
+    if (!testLoopback || !["http:", "https:"].includes(url.protocol)) {
+      throw new HttpError(500, "테스트용 Notion API 주소가 올바르지 않습니다.");
+    }
+  } else if (url.origin !== "https://api.notion.com") {
+    throw new HttpError(500, "Notion API 주소 설정이 올바르지 않습니다.");
+  }
+  const basePath = url.pathname.replace(/\/+$/, "");
+  const relative = path.startsWith("/") ? path : `/${path}`;
+  const queryAt = relative.indexOf("?");
+  url.pathname = `${basePath}${queryAt < 0 ? relative : relative.slice(0, queryAt)}`;
+  url.search = queryAt < 0 ? "" : relative.slice(queryAt + 1);
+  url.hash = "";
+  return url;
+}
+
+async function notionApiRequest(method, path, body) {
+  const token = process.env.NOTION_TOKEN?.trim();
+  if (!token) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
+  let response;
+  try {
+    response = await fetch(getNotionApiUrl(path), {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Notion-Version": "2026-03-11",
+        Accept: "application/json",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new HttpError(502, "Notion API에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  let text;
+  try {
+    text = await response.text();
+  } catch {
+    throw new HttpError(502, "Notion 응답을 읽지 못했습니다.");
+  }
+  let payload = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      if (response.ok) throw new HttpError(502, "Notion API 응답을 해석할 수 없습니다.");
+    }
+  }
+  if (!response.ok) {
+    if (response.status === 401) throw new HttpError(401, "Notion 인증에 실패했습니다. NOTION_TOKEN을 확인해 주세요.");
+    if (response.status === 403) throw new HttpError(403, "Notion 데이터베이스/페이지 접근 권한이 없습니다. integration을 공유하고 편집 권한을 확인해 주세요.");
+    if (response.status === 404) throw new HttpError(404, "Notion 데이터베이스나 페이지를 찾지 못했습니다. ID와 integration 공유 설정을 확인해 주세요.");
+    if (response.status === 409) throw new HttpError(409, "Notion 데이터베이스가 갱신 중입니다. 잠시 후 다시 시도해 주세요.");
+    if (response.status === 429) throw new HttpError(429, "Notion API 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.");
+    if (response.status === 400 || response.status === 422) throw new HttpError(response.status, "Notion이 요청을 거부했습니다. 데이터베이스 속성 형식과 선택지를 확인해 주세요.");
+    if (response.status >= 500) throw new HttpError(502, `Notion 서비스에 일시적인 오류가 있습니다 (HTTP ${response.status}).`);
+    throw new HttpError(502, `Notion API 요청이 거부되었습니다 (HTTP ${response.status}).`);
+  }
+  return payload;
+}
+
+function notionPropertyType(property) {
+  if (typeof property?.type === "string") return property.type;
+  if (!property || typeof property !== "object") return "";
+  return ["title", "rich_text", "select", "date"].find((type) => Object.hasOwn(property, type)) || "";
+}
+
+function validateNotionPlanSchema(properties) {
+  const errors = [];
+  for (const [name, expectedType] of Object.entries(notionPlanSchemaRequirements)) {
+    const property = properties?.[name];
+    if (!property) {
+      errors.push(`누락된 속성: ${name} (${expectedType})`);
+      continue;
+    }
+    const actualType = notionPropertyType(property);
+    if (actualType !== expectedType) errors.push(`${name}: ${expectedType} 형식이어야 하지만 ${actualType || "형식 없음"}입니다`);
+  }
+  for (const [name, requiredOptions] of [
+    ["우선순위", ["높음", "보통", "낮음"]],
+    ["상태", ["계획됨", "보류", "완료"]],
+  ]) {
+    const property = properties?.[name];
+    if (notionPropertyType(property) !== "select") continue;
+    const options = new Set((property.select?.options || []).map((option) => option.name));
+    const missingOptions = requiredOptions.filter((option) => !options.has(option));
+    if (missingOptions.length) errors.push(`${name} 선택지 누락: ${missingOptions.join(", ")}`);
+  }
+  return errors;
+}
+
+async function initializeNotionPlanDatabase() {
+  const rawDatabaseId = process.env.NOTION_PLAN_DATABASE_ID?.trim();
+  notionPlanDatabaseState.configured = Boolean(rawDatabaseId);
+  notionPlanDatabaseState.initialized = true;
+  notionPlanDatabaseState.databaseId = "";
+  notionPlanDatabaseState.dataSourceId = "";
+  notionPlanDatabaseState.properties = null;
+  notionPlanDatabaseState.error = "";
+  notionPlanDatabaseState.errorStatus = 0;
+  if (!rawDatabaseId) return;
+
+  const databaseId = notionPlanDatabaseId;
+  if (!databaseId) {
+    notionPlanDatabaseState.error = "NOTION_PLAN_DATABASE_ID에 올바른 32자리 데이터베이스 ID 또는 Notion 링크를 입력해 주세요.";
+    notionPlanDatabaseState.errorStatus = 503;
+    return;
+  }
+  notionPlanDatabaseState.databaseId = databaseId;
+  try {
+    const database = await notionApiRequest("GET", `/v1/databases/${encodeURIComponent(databaseId)}`);
+    const dataSourceId = database?.data_sources?.find((source) => typeof source.id === "string")?.id;
+    if (!dataSourceId) {
+      notionPlanDatabaseState.error = "Notion 데이터베이스에서 data source ID를 찾지 못했습니다.";
+      notionPlanDatabaseState.errorStatus = 422;
+      return;
+    }
+    const dataSource = await notionApiRequest("GET", `/v1/data_sources/${encodeURIComponent(dataSourceId)}`);
+    const properties = dataSource?.properties;
+    const schemaErrors = validateNotionPlanSchema(properties);
+    if (schemaErrors.length) {
+      notionPlanDatabaseState.error = `Notion 수정계획 DB 스키마 오류: ${schemaErrors.join("; ")}`;
+      notionPlanDatabaseState.errorStatus = 422;
+      return;
+    }
+    notionPlanDatabaseState.dataSourceId = dataSourceId;
+    notionPlanDatabaseState.properties = properties;
+  } catch (error) {
+    notionPlanDatabaseState.error = error instanceof HttpError ? error.message : "Notion 수정계획 DB를 확인하지 못했습니다.";
+    notionPlanDatabaseState.errorStatus = error instanceof HttpError ? error.status : 503;
+  }
+}
+
+function notionPlanRateLimitKey(request) {
+  if (process.env.NODE_ENV === "test" && typeof request.headers["x-bugpin-test-ip"] === "string") {
+    return request.headers["x-bugpin-test-ip"].trim() || "test-unknown";
+  }
+  const address = request.socket?.remoteAddress || "unknown";
+  return address.startsWith("::ffff:") ? address.slice(7) : address;
+}
+
+function enforceNotionPlanRateLimit(request) {
+  const now = Date.now();
+  const key = notionPlanRateLimitKey(request);
+  const attempts = (notionPlanRateLimits.get(key) || []).filter((timestamp) => now - timestamp < notionPlanRateWindowMs);
+  if (attempts.length >= notionPlanRateLimit) {
+    notionPlanRateLimits.set(key, attempts);
+    throw new HttpError(429, "Notion 등록 요청이 많습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  attempts.push(now);
+  notionPlanRateLimits.set(key, attempts);
+  while (notionPlanRateLimits.size > 10_000) notionPlanRateLimits.delete(notionPlanRateLimits.keys().next().value);
+}
+
+function validatePlanText(value, label, options = {}) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (options.required && !normalized) throw new HttpError(400, `${label}을(를) 입력해 주세요.`);
+  if (normalized.length > 2000) throw new HttpError(400, `${label}은(는) 2,000자 이하여야 합니다.`);
+  return normalized;
+}
+
+function validIsoPlanDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function validateNotionPlanRequest(body) {
+  const plan = body?.plan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new HttpError(400, "수정 계획이 필요합니다.");
+  const bugId = validatePlanText(plan.bug_id, "버그 ID", { required: true });
+  const bugTitle = validatePlanText(plan.bug_title, "버그 제목", { required: true });
+  const assignee = validatePlanText(plan.assignee, "담당자", { required: true });
+  const dueDate = typeof plan.due_date === "string" ? plan.due_date : "";
+  if (!validIsoPlanDate(dueDate)) throw new HttpError(400, "마감일은 YYYY-MM-DD 형식의 올바른 날짜여야 합니다.");
+  if (!["high", "medium", "low"].includes(plan.priority)) throw new HttpError(400, "우선순위는 high, medium, low 중 하나여야 합니다.");
+  if (!["planned", "on_hold", "done"].includes(plan.status)) throw new HttpError(400, "상태는 planned, on_hold, done 중 하나여야 합니다.");
+  if (!plan.location || typeof plan.location !== "object" || Array.isArray(plan.location)) {
+    throw new HttpError(400, "확정 위치 정보가 필요합니다.");
+  }
+  const location = {
+    file: validatePlanText(plan.location.file, "파일", { required: true }),
+    function: validatePlanText(plan.location.function, "함수", { required: true }),
+    lines: validatePlanText(plan.location.lines, "줄 번호"),
+  };
+  const memo = validatePlanText(plan.memo, "메모");
+  if (typeof plan.created_at !== "string" || Number.isNaN(Date.parse(plan.created_at))) {
+    throw new HttpError(400, "등록일 형식이 올바르지 않습니다.");
+  }
+  if (typeof plan.updated_at !== "string" || Number.isNaN(Date.parse(plan.updated_at))) {
+    throw new HttpError(400, "수정일 형식이 올바르지 않습니다.");
+  }
+
+  const cause = validatePlanText(body.cause_hypothesis, "원인 추정");
+  const codeCandidates = body.code_candidates === undefined ? [] : body.code_candidates;
+  if (!Array.isArray(codeCandidates) || codeCandidates.length > 10) throw new HttpError(400, "코드 후보는 10개 이하여야 합니다.");
+  const normalizedCodeCandidates = codeCandidates.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new HttpError(400, `코드 후보 ${index + 1} 형식이 올바르지 않습니다.`);
+    const file = validatePlanText(candidate.file, "코드 파일", { required: true });
+    const functionName = validatePlanText(candidate.function, "코드 함수", { required: true });
+    const lines = validatePlanText(candidate.lines, "코드 줄");
+    if (typeof candidate.code !== "string" || candidate.code.length > 20_000) throw new HttpError(400, "코드 미리보기는 후보마다 20,000자 이하여야 합니다.");
+    return { file, function: functionName, lines, code: candidate.code };
+  });
+
+  const reports = body.reports === undefined ? [] : body.reports;
+  if (!Array.isArray(reports) || reports.length > 10) throw new HttpError(400, "제보 원문은 최대 10건까지 등록할 수 있습니다.");
+  const normalizedReports = reports.map((report, index) => {
+    if (!report || typeof report !== "object" || Array.isArray(report)) throw new HttpError(400, `제보 ${index + 1} 형식이 올바르지 않습니다.`);
+    return {
+      report_id: validatePlanText(report.report_id, "제보 ID", { required: true }),
+      reporter: validatePlanText(report.reporter, "제보자"),
+      created_at: validatePlanText(report.created_at, "제보 시각"),
+      text: validatePlanText(report.text, "제보 원문"),
+    };
+  });
+  const requestedPageId = body.notion_page_id ? normalizeNotionPageId(body.notion_page_id) : null;
+  if (body.notion_page_id && !requestedPageId) throw new HttpError(400, "Notion 페이지 ID 형식이 올바르지 않습니다.");
+
+  return {
+    plan: {
+      bug_id: bugId,
+      bug_title: bugTitle,
+      location,
+      assignee,
+      due_date: dueDate,
+      priority: plan.priority,
+      memo,
+      status: plan.status,
+      created_at: plan.created_at,
+      updated_at: plan.updated_at,
+    },
+    cause,
+    codeCandidates: normalizedCodeCandidates,
+    reports: normalizedReports,
+    requestedPageId,
+  };
+}
+
+function notionRichText(value) {
+  const chunks = [];
+  const points = Array.from(value || "");
+  for (let index = 0; index < points.length; index += 1800) {
+    chunks.push({ type: "text", text: { content: points.slice(index, index + 1800).join("") } });
+  }
+  return chunks;
+}
+
+function notionRichTextProperty(value) {
+  return { rich_text: notionRichText(value) };
+}
+
+function notionPlanPriority(plan) {
+  const values = {
+    high: { label: "높음", emoji: "🔴" },
+    medium: { label: "보통", emoji: "🟡" },
+    low: { label: "낮음", emoji: "🟢" },
+  };
+  return values[plan.priority];
+}
+
+function notionPlanStatus(plan) {
+  return ({ planned: "계획됨", on_hold: "보류", done: "완료" })[plan.status];
+}
+
+function notionPlanProperties(plan) {
+  const priority = notionPlanPriority(plan);
+  const title = `${priority.emoji} ${plan.bug_title}`;
+  const createdDate = new Date(plan.created_at).toISOString().slice(0, 10);
+  const locationText = [plan.location.file, plan.location.function, plan.location.lines].filter(Boolean).join(" · ");
+  return {
+    "버그": { title: notionRichText(title) },
+    "담당자": { select: { name: plan.assignee } },
+    "마감일": { date: { start: plan.due_date } },
+    "등록일": { date: { start: createdDate } },
+    "우선순위": { select: { name: priority.label } },
+    "상태": { select: { name: notionPlanStatus(plan) } },
+    "위치": notionRichTextProperty(locationText),
+    "파일": notionRichTextProperty(plan.location.file),
+    "함수": notionRichTextProperty(plan.location.function),
+    "줄": notionRichTextProperty(plan.location.lines),
+    "메모": notionRichTextProperty(plan.memo),
+    "버그 ID": notionRichTextProperty(plan.bug_id),
+  };
+}
+
+function notionTextBlockLegacy(type, text) {
+  return { object: "block", type, [type]: { rich_text: notionRichText(text) } };
+}
+
+function notionCodeBlocks(candidate) {
+  const heading = notionTextBlock("heading_3", `${candidate.file} · ${candidate.function}${candidate.lines ? ` · ${candidate.lines}` : ""}`);
+  const code = candidate.code || "// README 기반 후보이며 실제 GitHub 코드 스니펫은 제공되지 않았습니다.";
+  const chunks = notionRichText(code);
+  const blocks = [];
+  for (let index = 0; index < chunks.length; index += 100) {
+    blocks.push({ object: "block", type: "code", code: { rich_text: chunks.slice(index, index + 100), language: "csharp" } });
+  }
+  return [heading, ...blocks];
+}
+
+function buildNotionPlanBlocks(payload) {
+  const blocks = [
+    notionTextBlock("heading_2", "원인 추정"),
+    notionTextBlock("paragraph", payload.cause || "원인 추정이 제공되지 않았습니다. 추가 확인이 필요합니다."),
+    notionTextBlock("heading_2", "코드"),
+  ];
+  if (payload.codeCandidates.length === 0) {
+    blocks.push(...notionCodeBlocks({ file: "README 기반 의심 후보", function: "실제 함수 확인 불가", lines: "", code: "" }));
+  } else {
+    for (const candidate of payload.codeCandidates) blocks.push(...notionCodeBlocks(candidate));
+  }
+  blocks.push(notionTextBlock("heading_2", "제보 원문"));
+  if (payload.reports.length === 0) blocks.push(notionTextBlock("paragraph", "연결된 제보 원문이 없습니다."));
+  for (const report of payload.reports.slice(0, 10)) {
+    const prefix = `[${report.report_id}]${report.reporter ? ` ${report.reporter}` : ""}${report.created_at ? ` · ${report.created_at}` : ""}\n`;
+    blocks.push(notionTextBlock("paragraph", `${prefix}${report.text}`));
+  }
+  if (blocks.length > 100) throw new HttpError(400, "Notion 카드 본문 블록이 너무 많습니다. 코드 후보를 줄여 주세요.");
+  return blocks;
+}
+
+function notionRichTextPropertyValueLegacy(property) {
+  return (property?.rich_text || []).map((item) => item.plain_text || item.text?.content || "").join("");
+}
+
+async function findNotionPlanPageByBugIdLegacy(bugId) {
+  const response = await notionApiRequest("POST", `/v1/data_sources/${encodeURIComponent(notionPlanDatabaseState.dataSourceId)}/query`, {
+    filter: { property: "버그 ID", rich_text: { equals: bugId } },
+    page_size: 100,
+  });
+  if (!Array.isArray(response?.results)) throw new HttpError(502, "Notion DB 검색 응답 형식이 올바르지 않습니다.");
+  return response.results.find((page) => notionRichTextPropertyValueLegacy(page.properties?.["버그 ID"]) === bugId) || null;
+}
+
+function validateNotionPlanText(value, label, required = false) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (required && !text) throw new HttpError(400, `${label}은(는) 필수입니다.`);
+  if (text.length > 2000) throw new HttpError(400, `${label}은(는) 2,000자 이하여야 합니다.`);
+  return text;
+}
+
+function isValidPlanIsoDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function normalizeNotionPlanPayload(body) {
+  const plan = body?.plan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new HttpError(400, "수정 계획 데이터가 필요합니다.");
+  const normalizedPlan = {
+    bug_id: validateNotionPlanText(plan.bug_id, "버그 ID", true),
+    bug_title: validateNotionPlanText(plan.bug_title, "버그 제목", true),
+    assignee: validateNotionPlanText(plan.assignee, "담당자", true),
+    due_date: typeof plan.due_date === "string" ? plan.due_date : "",
+    priority: plan.priority,
+    memo: validateNotionPlanText(plan.memo, "메모"),
+    status: plan.status,
+    created_at: typeof plan.created_at === "string" ? plan.created_at : "",
+    updated_at: typeof plan.updated_at === "string" ? plan.updated_at : "",
+    location: {
+      file: validateNotionPlanText(plan.location?.file, "파일", true),
+      function: validateNotionPlanText(plan.location?.function, "함수", true),
+      lines: validateNotionPlanText(plan.location?.lines, "줄 번호"),
+    },
+  };
+  if (!isValidPlanIsoDate(normalizedPlan.due_date)) throw new HttpError(400, "마감일은 YYYY-MM-DD 형식의 올바른 날짜여야 합니다.");
+  if (!new Set(["high", "medium", "low"]).has(normalizedPlan.priority)) throw new HttpError(400, "우선순위는 high, medium, low 중 하나여야 합니다.");
+  if (!new Set(["planned", "on_hold", "done"]).has(normalizedPlan.status)) throw new HttpError(400, "상태는 planned, on_hold, done 중 하나여야 합니다.");
+  if (Number.isNaN(Date.parse(normalizedPlan.created_at)) || Number.isNaN(Date.parse(normalizedPlan.updated_at))) {
+    throw new HttpError(400, "등록일 또는 수정일 형식이 올바르지 않습니다.");
+  }
+
+  const cause = validateNotionPlanText(body.cause_hypothesis, "원인 추정");
+  const candidates = body.code_candidates === undefined ? [] : body.code_candidates;
+  if (!Array.isArray(candidates) || candidates.length > 10) throw new HttpError(400, "코드 후보는 10개 이하여야 합니다.");
+  const codeCandidates = candidates.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new HttpError(400, `코드 후보 ${index + 1} 형식이 올바르지 않습니다.`);
+    const code = typeof candidate.code === "string" ? candidate.code : "";
+    if (code.length > 20_000) throw new HttpError(400, `코드 후보 ${index + 1}의 미리보기는 20,000자 이하여야 합니다.`);
+    return {
+      file: validateNotionPlanText(candidate.file, `코드 후보 ${index + 1} 파일`, true),
+      function: validateNotionPlanText(candidate.function, `코드 후보 ${index + 1} 함수`, true),
+      lines: validateNotionPlanText(candidate.lines, `코드 후보 ${index + 1} 줄`),
+      code,
+    };
+  });
+
+  const reports = body.reports === undefined ? [] : body.reports;
+  if (!Array.isArray(reports) || reports.length > 10) throw new HttpError(400, "제보 원문은 최대 10건까지 전달할 수 있습니다.");
+  const normalizedReports = reports.map((report, index) => {
+    if (!report || typeof report !== "object" || Array.isArray(report)) throw new HttpError(400, `제보 ${index + 1} 형식이 올바르지 않습니다.`);
+    return {
+      report_id: validateNotionPlanText(report.report_id, `제보 ${index + 1} ID`, true),
+      reporter: validateNotionPlanText(report.reporter, `제보 ${index + 1} 작성자`),
+      created_at: validateNotionPlanText(report.created_at, `제보 ${index + 1} 작성 시각`),
+      text: validateNotionPlanText(report.text, `제보 ${index + 1} 원문`, true),
+    };
+  });
+
+  let requestedPageId = "";
+  if (body.notion_page_id !== undefined && body.notion_page_id !== "") {
+    requestedPageId = normalizeNotionPageId(body.notion_page_id) || "";
+    if (!requestedPageId) throw new HttpError(400, "저장된 Notion 카드 ID 형식이 올바르지 않습니다.");
+  }
+  return { plan: normalizedPlan, cause, codeCandidates, reports: normalizedReports, requestedPageId };
+}
+
+function notionTextRuns(value) {
+  const characters = Array.from(value || "");
+  const runs = [];
+  for (let index = 0; index < characters.length; index += 1800) {
+    runs.push({ type: "text", text: { content: characters.slice(index, index + 1800).join("") } });
+  }
+  return runs;
+}
+
+function notionRichTextValue(text) {
+  return { rich_text: notionTextRuns(text) };
+}
+
+function notionPlanPropertyValues(plan) {
+  const priorities = {
+    high: { label: "높음", emoji: "🔴" },
+    medium: { label: "보통", emoji: "🟡" },
+    low: { label: "낮음", emoji: "🟢" },
+  };
+  const statuses = { planned: "계획됨", on_hold: "보류", done: "완료" };
+  const priority = priorities[plan.priority];
+  const createdDate = new Date(plan.created_at).toISOString().slice(0, 10);
+  const locationText = [plan.location.file, plan.location.function, plan.location.lines].filter(Boolean).join(" · ");
+  return {
+    "버그": { title: notionTextRuns(`${priority.emoji} ${plan.bug_title}`) },
+    "담당자": { select: { name: plan.assignee } },
+    "마감일": { date: { start: plan.due_date } },
+    "등록일": { date: { start: createdDate } },
+    "우선순위": { select: { name: priority.label } },
+    "상태": { select: { name: statuses[plan.status] } },
+    "위치": notionRichTextValue(locationText),
+    "파일": notionRichTextValue(plan.location.file),
+    "함수": notionRichTextValue(plan.location.function),
+    "줄": notionRichTextValue(plan.location.lines),
+    "메모": notionRichTextValue(plan.memo),
+    "버그 ID": notionRichTextValue(plan.bug_id),
+  };
+}
+
+function notionTextBlock(type, text) {
+  return { object: "block", type, [type]: { rich_text: notionTextRuns(text) } };
+}
+
+function buildNotionPlanChildren(payload) {
+  const blocks = [
+    notionTextBlock("heading_2", "원인 추정"),
+    notionTextBlock("paragraph", payload.cause || "원인 추정이 제공되지 않았습니다. 추가 확인이 필요합니다."),
+    notionTextBlock("heading_2", "코드"),
+  ];
+  if (payload.codeCandidates.length === 0) {
+    blocks.push(notionTextBlock("heading_3", "실제 코드 미제공"));
+    blocks.push({ object: "block", type: "code", code: { rich_text: notionTextRuns("// README 기반 후보입니다. 실제 GitHub 코드 스니펫은 연결되지 않았습니다."), language: "csharp" } });
+  } else {
+    for (const candidate of payload.codeCandidates) {
+      blocks.push(notionTextBlock("heading_3", `${candidate.file} · ${candidate.function}${candidate.lines ? ` · ${candidate.lines}` : ""}`));
+      const chunks = notionTextRuns(candidate.code || "// 실제 코드 스니펫이 비어 있습니다.");
+      for (let index = 0; index < chunks.length; index += 100) {
+        blocks.push({ object: "block", type: "code", code: { rich_text: chunks.slice(index, index + 100), language: "csharp" } });
+      }
+    }
+  }
+  blocks.push(notionTextBlock("heading_2", "제보 원문"));
+  if (payload.reports.length === 0) blocks.push(notionTextBlock("paragraph", "연결된 제보 원문이 없습니다."));
+  for (const report of payload.reports.slice(0, 10)) {
+    blocks.push(notionTextBlock("paragraph", `[${report.report_id}]${report.reporter ? ` ${report.reporter}` : ""}${report.created_at ? ` · ${report.created_at}` : ""}\n${report.text}`));
+  }
+  if (blocks.length > 100) throw new HttpError(400, "수정 계획 Notion 카드 본문이 너무 큽니다.");
+  return blocks;
+}
+
+function readNotionRichTextLegacy(property) {
+  return (property?.rich_text || []).map((item) => item.plain_text || item.text?.content || "").join("");
+}
+
+async function findNotionPlanPageByBugIdLegacy2(bugId) {
+  if (!notionPlanDatabaseState.dataSourceId) throw new HttpError(503, "Notion 수정계획 DB의 data source를 확인할 수 없습니다.");
+  const result = await notionApiRequest("POST", `/v1/data_sources/${encodeURIComponent(notionPlanDatabaseState.dataSourceId)}/query`, {
+    filter: { property: "버그 ID", rich_text: { equals: bugId } },
+    page_size: 100,
+  });
+  if (!Array.isArray(result?.results)) throw new HttpError(502, "Notion 수정계획 DB 검색 응답 형식이 올바르지 않습니다.");
+  return result.results.find((page) => readNotionRichTextLegacy(page.properties?.["버그 ID"]) === bugId) || null;
+}
+
+async function getNotionPlanChildren(pageId) {
+  const children = [];
+  let cursor = "";
+  for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+    const query = cursor ? `?page_size=100&start_cursor=${encodeURIComponent(cursor)}` : "?page_size=100";
+    const result = await notionApiRequest("GET", `/v1/blocks/${encodeURIComponent(pageId)}/children${query}`);
+    if (!Array.isArray(result?.results)) throw new HttpError(502, "기존 Notion 수정 계획 카드 본문을 읽지 못했습니다.");
+    children.push(...result.results);
+    if (!result.has_more) return children;
+    if (typeof result.next_cursor !== "string" || !result.next_cursor) break;
+    cursor = result.next_cursor;
+  }
+  throw new HttpError(413, "기존 Notion 수정 계획 카드 본문이 너무 커서 갱신할 수 없습니다.");
+}
+
+async function overwriteNotionPlanPageLegacy(pageId, payload) {
+  const existingChildren = await getNotionPlanChildren(pageId);
+  for (const child of existingChildren) {
+    if (typeof child.id === "string") await notionApiRequest("PATCH", `/v1/blocks/${encodeURIComponent(child.id)}`, { in_trash: true });
+  }
+  await notionApiRequest("PATCH", `/v1/pages/${encodeURIComponent(pageId)}`, { properties: notionPlanPropertyValues(payload.plan) });
+  const children = buildNotionPlanChildren(payload);
+  if (children.length) await notionApiRequest("PATCH", `/v1/blocks/${encodeURIComponent(pageId)}/children`, { children });
+  const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(pageId)}`);
+  return { success: true, action: "updated", notion_page_id: page.id || pageId, url: page.url || "" };
+}
+
+async function resolveNotionPlanPageLegacy(payload) {
+  if (payload.notion_page_id) {
+    try {
+      const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(payload.notion_page_id)}`);
+      const parentSourceId = page.parent?.data_source_id || "";
+      const pageBugId = readNotionRichText(page.properties?.["버그 ID"]);
+      if (parentSourceId === notionPlanDatabaseState.dataSourceId && pageBugId === payload.plan.bug_id) return page;
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+  }
+  return queryNotionPlanPage(payload.plan.bug_id);
+}
+
+function validateNotionPlanRequestLegacy(body) {
+  const plan = body?.plan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new HttpError(400, "수정 계획 데이터가 필요합니다.");
+  const text = (value, label, required = false) => {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (required && !normalized) throw new HttpError(400, `${label}은(는) 필수입니다.`);
+    if (normalized.length > 2000) throw new HttpError(400, `${label}은(는) 2,000자 이하여야 합니다.`);
+    return normalized;
+  };
+  const bugId = text(plan.bug_id, "버그 ID", true);
+  const bugTitle = text(plan.bug_title, "버그 제목", true);
+  const assignee = text(plan.assignee, "담당자", true);
+  const dueDate = typeof plan.due_date === "string" ? plan.due_date : "";
+  if (!isValidPlanIsoDate(dueDate)) throw new HttpError(400, "마감일은 YYYY-MM-DD 형식의 올바른 날짜여야 합니다.");
+  if (!["high", "medium", "low"].includes(plan.priority)) throw new HttpError(400, "우선순위는 high, medium, low 중 하나여야 합니다.");
+  if (!["planned", "on_hold", "done"].includes(plan.status)) throw new HttpError(400, "상태는 planned, on_hold, done 중 하나여야 합니다.");
+  if (!plan.location || typeof plan.location !== "object" || Array.isArray(plan.location)) throw new HttpError(400, "확정 위치 정보가 필요합니다.");
+  const normalizedPlan = {
+    bug_id: bugId,
+    bug_title: bugTitle,
+    assignee,
+    due_date: dueDate,
+    priority: plan.priority,
+    memo: text(plan.memo, "메모"),
+    status: plan.status,
+    created_at: typeof plan.created_at === "string" ? plan.created_at : "",
+    updated_at: typeof plan.updated_at === "string" ? plan.updated_at : "",
+    location: {
+      file: text(plan.location.file, "파일", true),
+      function: text(plan.location.function, "함수", true),
+      lines: text(plan.location.lines, "줄 번호"),
+    },
+  };
+  if (Number.isNaN(Date.parse(normalizedPlan.created_at)) || Number.isNaN(Date.parse(normalizedPlan.updated_at))) {
+    throw new HttpError(400, "등록일 또는 수정일 형식이 올바르지 않습니다.");
+  }
+
+  const cause = text(body.cause_hypothesis, "원인 추정");
+  const codeCandidates = body.code_candidates === undefined ? [] : body.code_candidates;
+  if (!Array.isArray(codeCandidates) || codeCandidates.length > 10) throw new HttpError(400, "코드 후보는 10개 이하여야 합니다.");
+  const normalizedCodeCandidates = codeCandidates.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new HttpError(400, `코드 후보 ${index + 1} 형식이 올바르지 않습니다.`);
+    const code = typeof candidate.code === "string" ? candidate.code : "";
+    if (code.length > 20_000) throw new HttpError(400, `코드 후보 ${index + 1}의 미리보기는 20,000자 이하여야 합니다.`);
+    return {
+      file: text(candidate.file, `코드 후보 ${index + 1} 파일`, true),
+      function: text(candidate.function, `코드 후보 ${index + 1} 함수`, true),
+      lines: text(candidate.lines, `코드 후보 ${index + 1} 줄`),
+      code,
+    };
+  });
+  const reports = body.reports === undefined ? [] : body.reports;
+  if (!Array.isArray(reports) || reports.length > 10) throw new HttpError(400, "제보 원문은 최대 10건까지 전달할 수 있습니다.");
+  const normalizedReports = reports.map((report, index) => {
+    if (!report || typeof report !== "object" || Array.isArray(report)) throw new HttpError(400, `제보 ${index + 1} 형식이 올바르지 않습니다.`);
+    return {
+      report_id: text(report.report_id, `제보 ${index + 1} ID`, true),
+      reporter: text(report.reporter, `제보 ${index + 1} 작성자`),
+      created_at: text(report.created_at, `제보 ${index + 1} 작성 시각`),
+      text: text(report.text, `제보 ${index + 1} 원문`, true),
+    };
+  });
+  const notionPageId = body.notion_page_id ? normalizeNotionPageId(body.notion_page_id) : "";
+  if (body.notion_page_id && !notionPageId) throw new HttpError(400, "저장된 Notion 카드 ID 형식이 올바르지 않습니다.");
+  return { plan: normalizedPlan, cause, codeCandidates: normalizedCodeCandidates, reports: normalizedReports, notion_page_id: notionPageId };
+}
+
+function notionPlanFields(plan) {
+  const priority = {
+    high: { label: "높음", emoji: "🔴" },
+    medium: { label: "보통", emoji: "🟡" },
+    low: { label: "낮음", emoji: "🟢" },
+  }[plan.priority];
+  const status = { planned: "계획됨", on_hold: "보류", done: "완료" }[plan.status];
+  const dateCreated = new Date(plan.created_at).toISOString().slice(0, 10);
+  const textValue = (value) => ({ rich_text: notionTextRuns(value) });
+  const location = [plan.location.file, plan.location.function, plan.location.lines].filter(Boolean).join(" · ");
+  return {
+    "버그": { title: notionTextRuns(`${priority.emoji} ${plan.bug_title}`) },
+    "담당자": { select: { name: plan.assignee } },
+    "마감일": { date: { start: plan.due_date } },
+    "등록일": { date: { start: dateCreated } },
+    "우선순위": { select: { name: priority.label } },
+    "상태": { select: { name: status } },
+    "위치": textValue(location),
+    "파일": textValue(plan.location.file),
+    "함수": textValue(plan.location.function),
+    "줄": textValue(plan.location.lines),
+    "메모": textValue(plan.memo),
+    "버그 ID": textValue(plan.bug_id),
+  };
+}
+
+function notionPlanChildren(payload) {
+  const blocks = [
+    notionTextBlock("heading_2", "원인 추정"),
+    notionTextBlock("paragraph", payload.cause || "추가 확인이 필요합니다."),
+    notionTextBlock("heading_2", "코드"),
+  ];
+  if (payload.codeCandidates.length === 0) {
+    blocks.push(notionTextBlock("paragraph", "README 기반 후보이며 실제 코드 스니펫은 없습니다."));
+  } else {
+    for (const candidate of payload.codeCandidates) {
+      blocks.push(notionTextBlock("heading_3", `${candidate.file} · ${candidate.function}${candidate.lines ? ` · ${candidate.lines}` : ""}`));
+      const runs = notionTextRuns(candidate.code || "// 실제 코드 스니펫이 비어 있습니다.");
+      for (let offset = 0; offset < runs.length; offset += 100) {
+        blocks.push({ object: "block", type: "code", code: { rich_text: runs.slice(offset, offset + 100), language: "csharp" } });
+      }
+    }
+  }
+  blocks.push(notionTextBlock("heading_2", "제보 원문"));
+  if (payload.reports.length === 0) blocks.push(notionTextBlock("paragraph", "제보 원문이 전달되지 않았습니다."));
+  for (const report of payload.reports.slice(0, 10)) {
+    blocks.push(notionTextBlock("paragraph", `[${report.report_id}]${report.reporter ? ` ${report.reporter}` : ""}${report.created_at ? ` · ${report.created_at}` : ""}\n${report.text}`));
+  }
+  if (blocks.length > 100) throw new HttpError(400, "Notion 카드 본문 블록이 너무 많습니다.");
+  return blocks;
+}
+
+function readNotionRichText(property) {
+  return (property?.rich_text || []).map((part) => part.plain_text || part.text?.content || "").join("");
+}
+
+async function queryNotionPlanPage(bugId) {
+  const result = await notionApiRequest("POST", `/v1/data_sources/${encodeURIComponent(notionPlanDatabaseState.dataSourceId)}/query`, {
+    filter: { property: "버그 ID", rich_text: { equals: bugId } },
+    page_size: 100,
+  });
+  if (!Array.isArray(result?.results)) throw new HttpError(502, "Notion 수정계획 데이터베이스 검색 응답이 올바르지 않습니다.");
+  return result.results.find((page) => readNotionRichText(page.properties?.["버그 ID"]) === bugId) || null;
+}
+
+async function resolveNotionPlanPageByQuery(payload) {
+  if (payload.notion_page_id) {
+    try {
+      const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(payload.notion_page_id)}`);
+      const parentSourceId = page.parent?.data_source_id || "";
+      const pageBugId = readNotionRichText(page.properties?.["버그 ID"]);
+      if (parentSourceId === notionPlanDatabaseState.dataSourceId && pageBugId === payload.plan.bug_id) return page;
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+  }
+  return queryNotionPlanPage(payload.plan.bug_id);
+}
+
+async function notionBlockChildren(pageId) {
+  const blocks = [];
+  let cursor = "";
+  for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+    const query = cursor ? `?page_size=100&start_cursor=${encodeURIComponent(cursor)}` : "?page_size=100";
+    const result = await notionApiRequest("GET", `/v1/blocks/${encodeURIComponent(pageId)}/children${query}`);
+    if (!Array.isArray(result?.results)) throw new HttpError(502, "Notion 기존 카드 본문을 불러오지 못했습니다.");
+    blocks.push(...result.results);
+    if (!result.has_more) return blocks;
+    if (!result.next_cursor) break;
+    cursor = result.next_cursor;
+  }
+  throw new HttpError(413, "기존 Notion 카드 본문이 너무 커서 안전하게 덮어쓸 수 없습니다.");
+}
+
+async function updateNotionPlanPage(pageId, payload) {
+  const oldBlocks = await notionBlockChildren(pageId);
+  for (const block of oldBlocks) {
+    if (block.id) await notionApiRequest("PATCH", `/v1/blocks/${encodeURIComponent(block.id)}`, { in_trash: true });
+  }
+  await notionApiRequest("PATCH", `/v1/pages/${encodeURIComponent(pageId)}`, { properties: notionPlanFields(payload.plan) });
+  const children = notionPlanChildren(payload);
+  if (children.length) await notionApiRequest("PATCH", `/v1/blocks/${encodeURIComponent(pageId)}/children`, { children });
+  const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(pageId)}`);
+  return { success: true, action: "updated", notion_page_id: page.id || pageId, url: page.url || "" };
+}
+
+async function createOrUpdateNotionPlan(body) {
+  if (!process.env.NOTION_PLAN_DATABASE_ID?.trim()) throw new HttpError(503, "서버에 NOTION_PLAN_DATABASE_ID 환경 변수를 설정해 주세요.");
+  if (!process.env.NOTION_TOKEN?.trim()) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
+  if (notionPlanDatabaseState.error) throw new HttpError(notionPlanDatabaseState.errorStatus || 503, notionPlanDatabaseState.error);
+  if (!notionPlanDatabaseState.dataSourceId || !notionPlanDatabaseState.properties) {
+    throw new HttpError(503, "Notion 수정계획 데이터베이스의 data source를 확인할 수 없습니다.");
+  }
+
+  const payload = validateNotionPlanRequest(body);
+  const existing = await resolveNotionPlanPage(payload);
+  if (existing?.id) return updateNotionPlanPage(existing.id, payload);
+
+  const created = await notionApiRequest("POST", "/v1/pages", {
+    parent: { type: "data_source_id", data_source_id: notionPlanDatabaseState.dataSourceId },
+    properties: notionPlanFields(payload.plan),
+    children: notionPlanChildren(payload),
+  });
+  if (typeof created?.id !== "string" || typeof created?.url !== "string") {
+    throw new HttpError(502, "Notion이 생성된 수정 계획 카드의 링크를 반환하지 않았습니다.");
+  }
+  return { success: true, action: "created", notion_page_id: created.id, url: created.url };
+}
+
+async function getNotionPlanPageChildren(pageId) {
+  const children = [];
+  let cursor = "";
+  for (let page = 0; page < 10; page += 1) {
+    const query = cursor ? `?page_size=100&start_cursor=${encodeURIComponent(cursor)}` : "?page_size=100";
+    const response = await notionApiRequest("GET", `/v1/blocks/${encodeURIComponent(pageId)}/children${query}`);
+    if (!Array.isArray(response?.results)) throw new HttpError(502, "Notion 카드 본문을 읽을 수 없습니다.");
+    children.push(...response.results);
+    if (!response.has_more) return children;
+    if (typeof response.next_cursor !== "string" || !response.next_cursor) break;
+    cursor = response.next_cursor;
+  }
+  throw new HttpError(413, "기존 Notion 카드 본문이 너무 커서 안전하게 덮어쓸 수 없습니다.");
+}
+
+async function overwriteNotionPlanPage(pageId, payload) {
+  const existingChildren = await getNotionPlanPageChildren(pageId);
+  const children = buildNotionPlanBlocks(payload);
+  await notionApiRequest("PATCH", `/v1/pages/${encodeURIComponent(pageId)}`, { properties: notionPlanProperties(payload.plan) });
+  if (children.length) {
+    await notionApiRequest("PATCH", `/v1/blocks/${encodeURIComponent(pageId)}/children`, { children });
+  }
+  for (const child of existingChildren) {
+    if (typeof child.id === "string") {
+      await notionApiRequest("PATCH", `/v1/blocks/${encodeURIComponent(child.id)}`, { in_trash: true });
+    }
+  }
+  const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(pageId)}`);
+  return { success: true, notion_page_id: page.id || pageId, url: page.url || "", action: "updated" };
+}
+
+async function resolveNotionPlanPage(payload) {
+  if (payload.requestedPageId) {
+    try {
+      const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(payload.requestedPageId)}`);
+      const parentSourceId = page.parent?.data_source_id || "";
+      const existingBugId = notionRichTextValue(page.properties?.["버그 ID"]);
+      if (parentSourceId === notionPlanDatabaseState.dataSourceId && existingBugId === payload.plan.bug_id) return page;
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+  }
+  return queryNotionPlanPage(payload.plan.bug_id);
+}
+
+async function syncNotionPlan(body) {
+  if (!process.env.NOTION_PLAN_DATABASE_ID?.trim()) {
+    throw new HttpError(503, "서버에 NOTION_PLAN_DATABASE_ID 환경 변수를 설정해 주세요.");
+  }
+  if (!process.env.NOTION_TOKEN?.trim()) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
+  if (notionPlanDatabaseState.error) throw new HttpError(notionPlanDatabaseState.errorStatus || 503, notionPlanDatabaseState.error);
+  if (!notionPlanDatabaseState.dataSourceId || !notionPlanDatabaseState.properties) {
+    throw new HttpError(503, "Notion 수정계획 DB의 data source 정보를 아직 사용할 수 없습니다. 서버 설정을 확인해 주세요.");
+  }
+
+  const payload = normalizeNotionPlanPayload(body);
+  const existing = await resolveNotionPlanPage(payload);
+  if (existing?.id) return overwriteNotionPlanPage(existing.id, payload);
+
+  const children = buildNotionPlanBlocks(payload);
+  const page = await notionApiRequest("POST", "/v1/pages", {
+    parent: { type: "data_source_id", data_source_id: notionPlanDatabaseState.dataSourceId },
+    properties: notionPlanProperties(payload.plan),
+    children,
+  });
+  if (typeof page?.id !== "string" || typeof page.url !== "string") {
+    throw new HttpError(502, "Notion이 생성된 카드의 링크를 반환하지 않았습니다.");
+  }
+  return { success: true, notion_page_id: page.id, url: page.url, action: "created" };
 }
 
 function getNotionMarkdownEndpoint(pageId) {
@@ -1644,6 +2486,16 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, await fetchNotionReadmeMarkdown());
       return;
     }
+    if (pathname === "/api/notion/plan") {
+      if (request.method !== "POST") {
+        sendJson(response, 405, { error: "POST 요청만 사용할 수 있습니다." });
+        return;
+      }
+      enforceNotionPlanRateLimit(request);
+      const body = await readJsonBody(request);
+      sendJson(response, 200, await syncNotionPlan(body));
+      return;
+    }
     if (pathname === "/api/analyze") {
       if (request.method !== "POST") {
         sendJson(response, 405, { error: "POST 요청만 사용할 수 있습니다." });
@@ -1753,6 +2605,8 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`BugPin is listening on http://0.0.0.0:${port}`);
+initializeNotionPlanDatabase().finally(() => {
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`BugPin is listening on http://0.0.0.0:${port}`);
+  });
 });

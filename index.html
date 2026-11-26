@@ -670,6 +670,27 @@
   .fix-plan-summary-memo { margin: 0; padding: 9px 10px; border-radius: 7px; background: rgba(255, 255, 255, .78); color: #556259; font-size: 11px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
   .fix-plan-summary-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .fix-plan-status-label { color: #85693a; font-size: 10px; font-weight: 720; }
+  .fix-plan-notion-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 9px; border-radius: 8px; background: #eef5eb; color: #426148; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+  .fix-plan-notion-state[data-kind="error"] { background: #fff2ee; color: #8e4034; }
+  .fix-plan-notion-state[data-kind="loading"] { background: #f1f3ed; color: #657164; }
+  .fix-plan-notion-badge { display: inline-flex; min-height: 22px; flex: 0 0 auto; align-items: center; padding: 3px 8px; border-radius: 18px; background: #dff0dc; color: #315d39; font-size: 10px; font-weight: 750; }
+  .fix-plan-notion-link { color: inherit; font-size: 10px; font-weight: 720; text-underline-offset: 2px; }
+  .fix-plan-notion-retry { min-height: 32px; padding: 5px 9px; border: 1px solid #e3c7bc; border-radius: 7px; background: #fff; color: #874539; font: inherit; font-size: 10px; font-weight: 720; cursor: pointer; }
+  .fix-plan-notion-retry:disabled { cursor: wait; opacity: .6; }
+  .fix-plan-notion-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 9px; border-radius: 8px; background: #eef5eb; color: #426148; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+  .fix-plan-notion-state[data-kind="error"] { background: #fff2ee; color: #8e4034; }
+  .fix-plan-notion-state[data-kind="loading"] { background: #f1f3ed; color: #657164; }
+  .fix-plan-notion-badge { display: inline-flex; min-height: 22px; flex: 0 0 auto; align-items: center; padding: 3px 8px; border-radius: 18px; background: #dff0dc; color: #315d39; font-size: 10px; font-weight: 750; }
+  .fix-plan-notion-link { color: inherit; font-size: 10px; font-weight: 720; text-underline-offset: 2px; }
+  .fix-plan-notion-retry { min-height: 32px; padding: 5px 9px; border: 1px solid #e3c7bc; border-radius: 7px; background: #fff; color: #874539; font: inherit; font-size: 10px; font-weight: 720; cursor: pointer; }
+  .fix-plan-notion-retry:disabled { cursor: wait; opacity: .6; }
+  .fix-plan-notion-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 9px; border-radius: 8px; background: #eef5eb; color: #426148; font-size: 11px; line-height: 1.55; }
+  .fix-plan-notion-state[data-kind="error"] { background: #fff2ee; color: #8e4034; }
+  .fix-plan-notion-state[data-kind="loading"] { background: #f1f3ed; color: #657164; }
+  .fix-plan-notion-badge { display: inline-flex; min-height: 22px; align-items: center; padding: 3px 8px; border-radius: 18px; background: #dff0dc; color: #315d39; font-size: 10px; font-weight: 750; }
+  .fix-plan-notion-link { color: inherit; font-size: 10px; font-weight: 720; text-underline-offset: 2px; }
+  .fix-plan-notion-retry { min-height: 32px; padding: 5px 9px; border: 1px solid #e3c7bc; border-radius: 7px; background: #fff; color: #874539; font: inherit; font-size: 10px; font-weight: 720; cursor: pointer; }
+  .fix-plan-notion-retry:disabled { cursor: wait; opacity: .6; }
   .bug-list-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 11px; }
   .bug-sort-controls { display: flex; flex-wrap: wrap; gap: 6px; }
   .bug-sort-button, .fix-plan-export { min-height: 36px; padding: 6px 10px; border: 1px solid #dce5d9; border-radius: 8px; background: #fff; color: #5d6b60; font: inherit; font-size: 10px; font-weight: 690; cursor: pointer; }
@@ -1060,6 +1081,22 @@
       // 손상된 브라우저 저장 값은 읽기만 건너뛰고 새 계획을 다시 저장할 수 있습니다.
     }
     window.bugPinFixPlans = fixPlansByBugId;
+    const notionPlanRefsStorageKey = "bugpin.fix-plan-notion-pages.v1";
+    const notionPlanRefsByBugId = new Map();
+    const notionPlanSyncStateByBugId = new Map();
+    try {
+      const storedRefs = JSON.parse(localStorage.getItem(notionPlanRefsStorageKey) || "{}");
+      if (storedRefs && typeof storedRefs === "object" && !Array.isArray(storedRefs)) {
+        for (const [bugId, ref] of Object.entries(storedRefs)) {
+          if (ref && typeof ref.notion_page_id === "string" && typeof ref.url === "string") {
+            notionPlanRefsByBugId.set(bugId, ref);
+            notionPlanSyncStateByBugId.set(bugId, { status: "synced", url: ref.url, error: "" });
+          }
+        }
+      }
+    } catch {
+      // 손상된 Notion 카드 링크 저장값은 다시 등록할 수 있도록 건너뜁니다.
+    }
     let githubFileRequestVersion = 0;
     let highlightedSummaryTarget = null;
     let summaryHighlightTimer = null;
@@ -1102,6 +1139,104 @@
       persistFixPlans();
       const state = window.bugPinLocationStates.get(plan.bug_id);
       if (state) state.plan = plan;
+    }
+
+    function persistNotionPlanRefs() {
+      const refs = Object.fromEntries(notionPlanRefsByBugId);
+      try {
+        localStorage.setItem(notionPlanRefsStorageKey, JSON.stringify(refs));
+      } catch {
+        // Notion page ID/URL cache is optional; retry can still find the card by bug ID.
+      }
+    }
+
+    function setNotionPlanSyncState(bugId, state) {
+      notionPlanSyncStateByBugId.set(bugId, state);
+      const previous = notionPlanRefsByBugId.get(bugId) || {};
+      if (state.status === "synced" && state.notion_page_id && state.url) {
+        notionPlanRefsByBugId.set(bugId, { notion_page_id: state.notion_page_id, url: state.url });
+      } else if (previous.notion_page_id) {
+        notionPlanRefsByBugId.set(bugId, previous);
+      }
+      persistNotionPlanRefs();
+    }
+
+    function notionCauseForCandidates(candidates) {
+      return [...new Set(candidates.map((candidate) => candidate.hypothesis || candidate.reason || "").map((value) => value.trim()).filter(Boolean))].join("\n");
+    }
+
+    function notionCodeCandidates(candidates) {
+      return candidates.map((candidate) => ({
+        file: candidate.file || candidate.script || "스크립트 미특정",
+        function: candidate.function || "함수 미특정",
+        lines: candidate.line || (Number.isInteger(candidate.line_start)
+          ? candidate.line_start === candidate.line_end ? `L${candidate.line_start}` : `L${candidate.line_start}-L${candidate.line_end}`
+          : ""),
+        code: candidate.source === "github" ? candidate.code || "" : "",
+      }));
+    }
+
+    function notionReportsForBug(bug) {
+      const byId = new Map(window.bugPinReports.map((report) => [report.report_id, report]));
+      return bug.report_ids.slice(0, 10).map((id) => byId.get(id)).filter(Boolean).map((report) => ({
+        report_id: report.report_id,
+        reporter: report.reporter,
+        created_at: report.created_at,
+        text: report.text,
+      }));
+    }
+
+    async function syncFixPlanToNotion(bugId, state, plan, candidates, retryButton = null) {
+      if (state.notionSyncStatus === "syncing") return;
+      state.notionSyncStatus = "syncing";
+      state.notionSyncError = "";
+      setNotionPlanSyncState(bugId, { status: "syncing", url: notionPlanRefsByBugId.get(bugId)?.url || "", error: "" });
+      if (retryButton) {
+        retryButton.disabled = true;
+        retryButton.textContent = "다시 등록 중...";
+      }
+
+      try {
+        renderLocationState(bugId);
+        const payload = {
+          plan,
+          notion_page_id: notionPlanRefsByBugId.get(bugId)?.notion_page_id || "",
+          cause_hypothesis: notionCauseForCandidates(candidates),
+          code_candidates: notionCodeCandidates(candidates),
+          reports: notionReportsForBug(window.bugPinAnalysis.bugs.find((bug) => bug.bug_id === bugId) || { report_ids: [] }),
+        };
+        const response = await fetch("/api/notion/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Notion 카드 등록에 실패했습니다.");
+        if (typeof result.notion_page_id !== "string" || typeof result.url !== "string" || !result.url) {
+          throw new Error("Notion 응답에 카드 링크가 없습니다.");
+        }
+        state.notionSyncStatus = "synced";
+        state.notionSyncError = "";
+        setNotionPlanSyncState(bugId, { status: "synced", notion_page_id: result.notion_page_id, url: result.url, action: result.action });
+      } catch (error) {
+        state.notionSyncStatus = "failed";
+        state.notionSyncError = error.message || "Notion 카드 등록에 실패했습니다.";
+        setNotionPlanSyncState(bugId, {
+          status: "failed",
+          url: notionPlanRefsByBugId.get(bugId)?.url || "",
+          error: state.notionSyncError,
+        });
+      } finally {
+        try {
+          renderLocationState(bugId);
+        } catch {
+          // Notion sync state should not interrupt the already-saved local fix plan.
+        }
+        if (retryButton) {
+          retryButton.disabled = false;
+          retryButton.textContent = "다시 시도";
+        }
+      }
     }
 
     function getAssigneeSuggestions() {
@@ -1191,6 +1326,45 @@
         memo.className = "fix-plan-summary-memo";
         memo.textContent = plan.memo;
         section.append(memo);
+      }
+      const notionSync = notionPlanSyncStateByBugId.get(bugId) || (notionPlanRefsByBugId.has(bugId)
+        ? { status: "synced", ...notionPlanRefsByBugId.get(bugId) }
+        : null);
+      if (notionSync?.status === "synced") {
+        const notionStatus = document.createElement("div");
+        notionStatus.className = "fix-plan-notion-state";
+        const badge = document.createElement("span");
+        badge.className = "fix-plan-notion-badge";
+        badge.textContent = "Notion 등록됨";
+        const link = document.createElement("a");
+        link.className = "fix-plan-notion-link";
+        link.href = notionSync.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Notion에서 보기";
+        notionStatus.append(badge, link);
+        section.append(notionStatus);
+      } else if (notionSync?.status === "syncing") {
+        const syncing = document.createElement("div");
+        syncing.className = "fix-plan-notion-state";
+        syncing.dataset.kind = "loading";
+        syncing.textContent = "Notion에 수정 계획 등록 중...";
+        section.append(syncing);
+      } else if (notionSync?.status === "failed") {
+        const failed = document.createElement("div");
+        failed.className = "fix-plan-notion-state";
+        failed.dataset.kind = "error";
+        const message = document.createElement("span");
+        message.textContent = `Notion 등록 실패: ${notionSync.error || "다시 시도해 주세요."}`;
+        const retry = document.createElement("button");
+        retry.className = "fix-plan-notion-retry";
+        retry.type = "button";
+        retry.textContent = "다시 시도";
+        retry.addEventListener("click", () => {
+          syncFixPlanToNotion(bugId, state, plan, confirmedCandidatesForState(state), retry);
+        });
+        failed.append(message, retry);
+        section.append(failed);
       }
       if (held) {
         const label = document.createElement("span");
@@ -1398,6 +1572,7 @@
         state.planEditing = false;
         renderLocationState(bugId);
         applyBugSort(bugSortMode);
+        syncFixPlanToNotion(bugId, state, result.plan, candidates);
       });
       section.append(heading, form);
       return section;

@@ -184,7 +184,7 @@ export async function startMockLlm() {
     requests.push({
       method: request.method,
       path: request.url,
-      authorization: request.headers.authorization,
+      hasAuthorizationHeader: Boolean(request.headers.authorization),
       model: body.model,
       mode,
       messages: body.messages,
@@ -235,40 +235,178 @@ export async function startMockNotion() {
   let mode = "normal";
   let markdown = "# Notion README body\n\n- `PlayerMovement.cs` — Moves the player.\n\nThis is the full page body, not only its title.";
   const requests = [];
+  const pages = new Map();
+  const databaseId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const dataSourceId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  let nextPageId = 1;
+  let nextBlockId = 1;
+  const schema = {
+    "버그": { type: "title", title: {} },
+    "담당자": { type: "select", select: { options: [] } },
+    "마감일": { type: "date", date: {} },
+    "등록일": { type: "date", date: {} },
+    "우선순위": { type: "select", select: { options: ["높음", "보통", "낮음"].map((name) => ({ name })) } },
+    "상태": { type: "select", select: { options: ["계획됨", "보류", "완료"].map((name) => ({ name })) } },
+    "위치": { type: "rich_text", rich_text: {} },
+    "파일": { type: "rich_text", rich_text: {} },
+    "함수": { type: "rich_text", rich_text: {} },
+    "줄": { type: "rich_text", rich_text: {} },
+    "메모": { type: "rich_text", rich_text: {} },
+    "버그 ID": { type: "rich_text", rich_text: {} },
+  };
   const server = createServer(async (request, response) => {
     const requestMode = mode;
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    let body = null;
+    if (chunks.length) {
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      } catch {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "invalid JSON" }));
+        return;
+      }
+    }
     requests.push({
       method: request.method,
       path: request.url,
-      authorization: request.headers.authorization,
+      hasAuthorizationHeader: Boolean(request.headers.authorization),
       notionVersion: request.headers["notion-version"],
+      body,
     });
+
+    const send = (status, value) => {
+      response.writeHead(status, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(value));
+    };
+    const url = new URL(request.url || "/", "http://localhost");
+    const path = url.pathname;
+
     if (mode === "permission-denied") {
-      response.writeHead(403, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ object: "error", code: "restricted_resource", message: "test page is not shared" }));
+      send(403, { object: "error", code: "restricted_resource", message: "test page is not shared" });
       return;
     }
     if (mode === "unauthorized") {
-      response.writeHead(401, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ object: "error", code: "unauthorized", message: "test token invalid" }));
+      send(401, { object: "error", code: "unauthorized", message: "test token invalid" });
       return;
     }
     if (mode === "not-found") {
-      response.writeHead(404, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ object: "error", code: "object_not_found", message: "test page missing" }));
+      send(404, { object: "error", code: "object_not_found", message: "test page missing" });
       return;
     }
     if (requestMode === "delay") await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
-    const body = requestMode === "empty"
-      ? { markdown: "  \n  " }
-      : { markdown };
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(body));
+
+    if (path === "/v1/pages/11111111-2222-4333-8444-555555555555/markdown" && request.method === "GET") {
+      send(200, { markdown: requestMode === "empty" ? "  \n  " : markdown });
+      return;
+    }
+    if (path === `/v1/databases/${databaseId}` && request.method === "GET") {
+      send(200, { object: "database", id: databaseId, data_sources: [{ id: dataSourceId, name: "BugPin plans" }] });
+      return;
+    }
+    if (path === `/v1/data_sources/${dataSourceId}` && request.method === "GET") {
+      const resultSchema = requestMode === "bad-schema"
+        ? { ...schema, "버그": { type: "rich_text", rich_text: {} } }
+        : schema;
+      send(200, { object: "data_source", id: dataSourceId, properties: resultSchema });
+      return;
+    }
+    if (path === `/v1/data_sources/${dataSourceId}/query` && request.method === "POST") {
+      const requestedBugId = body?.filter?.rich_text?.equals || "";
+      const matching = [...pages.values()].filter((page) => {
+        const property = page.properties?.["버그 ID"];
+        const value = (property?.rich_text || []).map((part) => part.text?.content || part.plain_text || "").join("");
+        return !page.archived && value === requestedBugId;
+      });
+      send(200, { object: "list", results: matching.map((page) => ({ ...page, object: "page" })), has_more: false, next_cursor: null });
+      return;
+    }
+    if (path === "/v1/pages" && request.method === "POST") {
+      if (requestMode === "create-fail") {
+        send(403, { object: "error", code: "restricted_resource", message: "mock write denied" });
+        return;
+      }
+      const id = `cccccccc-cccc-4ccc-8ccc-${String(nextPageId++).padStart(12, "0")}`;
+      const page = {
+        id,
+        url: `https://www.notion.so/${id.replace(/-/g, "")}`,
+        parent: { type: "data_source_id", data_source_id: body?.parent?.data_source_id },
+        properties: body?.properties || {},
+        children: (body?.children || []).map((child) => ({ id: `block-${nextBlockId++}`, ...child, in_trash: false })),
+        archived: false,
+      };
+      pages.set(id, page);
+      send(200, { object: "page", id, url: page.url, parent: page.parent, properties: page.properties });
+      return;
+    }
+    const pageMatch = path.match(/^\/v1\/pages\/([0-9a-f-]+)$/i);
+    if (pageMatch && request.method === "GET") {
+      const page = pages.get(pageMatch[1]);
+      if (!page) {
+        send(404, { object: "error", code: "object_not_found" });
+        return;
+      }
+      send(200, { ...page, object: "page" });
+      return;
+    }
+    if (pageMatch && request.method === "PATCH") {
+      if (requestMode === "update-fail") {
+        send(500, { object: "error", code: "mock_update_failed", message: "mock failure detail must stay private" });
+        return;
+      }
+      const page = pages.get(pageMatch[1]);
+      if (!page) {
+        send(404, { object: "error", code: "object_not_found" });
+        return;
+      }
+      page.properties = { ...page.properties, ...(body?.properties || {}) };
+      send(200, { ...page, object: "page" });
+      return;
+    }
+    const blockChildrenMatch = path.match(/^\/v1\/blocks\/([0-9a-f-]+)\/children$/i);
+    if (blockChildrenMatch && request.method === "GET") {
+      const page = pages.get(blockChildrenMatch[1]);
+      if (!page) {
+        send(404, { object: "error", code: "object_not_found" });
+        return;
+      }
+      send(200, { object: "list", results: page.children.filter((child) => !child.in_trash), has_more: false, next_cursor: null });
+      return;
+    }
+    if (blockChildrenMatch && request.method === "PATCH") {
+      const page = pages.get(blockChildrenMatch[1]);
+      if (!page) {
+        send(404, { object: "error", code: "object_not_found" });
+        return;
+      }
+      const added = (body?.children || []).map((child) => ({ id: `block-${nextBlockId++}`, ...child, in_trash: false }));
+      page.children.push(...added);
+      send(200, { object: "list", results: added, has_more: false, next_cursor: null });
+      return;
+    }
+    const blockMatch = path.match(/^\/v1\/blocks\/(block-[0-9]+)$/);
+    if (blockMatch && request.method === "PATCH") {
+      const blockId = blockMatch[1];
+      const block = [...pages.values()].flatMap((page) => page.children).find((child) => child.id === blockId);
+      if (!block) {
+        send(404, { object: "error", code: "object_not_found" });
+        return;
+      }
+      if (body?.in_trash === true || body?.archived === true) block.in_trash = true;
+      send(200, { ...block, object: "block" });
+      return;
+    }
+
+    send(404, { object: "error", code: "object_not_found", message: "unhandled mock endpoint" });
   });
   const port = await listen(server);
   return {
     url: `http://127.0.0.1:${port}`,
     requests,
+    pages,
+    databaseId,
+    dataSourceId,
     setMode(nextMode) { mode = nextMode; },
     setMarkdown(nextMarkdown) { markdown = nextMarkdown; },
     close() { return new Promise((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose())); },
@@ -291,6 +429,7 @@ export async function startBugPinServer(mockUrl, options = {}) {
       LLM_BASE_URL: mockUrl,
       NOTION_TOKEN: options.notionToken || "",
       NOTION_PAGE_ID: options.notionPageId || "",
+      NOTION_PLAN_DATABASE_ID: options.notionPlanDatabaseId || "",
       NOTION_API_BASE_URL: options.notionApiBaseUrl || "",
       NO_PROXY: "127.0.0.1,localhost",
       no_proxy: "127.0.0.1,localhost",
@@ -329,6 +468,7 @@ export async function startBugPinTestEnvironment(options = {}) {
     const app = await startBugPinServer(mock.url, {
       notionToken: options.notionConfigured ? "notion-test-only-token" : "",
       notionPageId: options.notionConfigured ? "11111111-2222-4333-8444-555555555555" : "",
+      notionPlanDatabaseId: options.notionConfigured ? notion?.databaseId : "",
       notionApiBaseUrl: notion?.url,
     });
     return {

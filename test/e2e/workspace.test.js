@@ -87,7 +87,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(notionLoaded.markdown, notionMarkdown);
   assert.match(notionLoaded.status, /노션 README를 불러왔습니다/);
   assert.equal(notionLoaded.ready, true);
-  assert.equal(environment.notion.requests.at(-1).authorization, "Bearer notion-test-only-token");
+  assert.equal(environment.notion.requests.at(-1).hasAuthorizationHeader, true);
 
   browser("eval", `(() => {
     window.__notionReadmeFetchOriginal = window.fetch.bind(window);
@@ -446,8 +446,41 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.match(planPreview.preview, /^강승우가 \d+\/\d+\(.+\)까지 고쳐야 합니다$/);
   assert.ok(planPreview.date > planPreview.min);
   assert.equal(planPreview.assigneeSuggestionStored, true);
+  browser("eval", `(() => {
+    const original = window.fetch.bind(window);
+    window.__planFetchTrace = [];
+    window.fetch = (input, options) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url !== "/api/notion/plan") return original(input, options);
+      window.__planFetchTrace.push({ url, body: options?.body ? JSON.parse(options.body) : null, status: "started" });
+      return original(input, options).then(response => {
+        window.__planFetchTrace.at(-1).status = response.status;
+        return response;
+      }).catch(error => {
+        window.__planFetchTrace.at(-1).status = "rejected";
+        window.__planFetchTrace.at(-1).error = error.message;
+        throw error;
+      });
+    };
+    return true;
+  })()`);
   browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-save");
   browser("click", ".bug-card:nth-of-type(1) .fix-plan-save");
+  try {
+    await waitFor(
+      "const card = document.querySelector('.bug-card:nth-of-type(1)'); const node = card?.querySelector('.fix-plan-notion-state'); const state = window.bugPinLocationStates.get(window.bugPinAnalysis.bugs[0].bug_id); return { done: Boolean(node && (card.querySelector('.fix-plan-notion-badge')?.textContent === 'Notion 등록됨' || node.dataset.kind === 'error')), hasSummary: Boolean(card?.querySelector('.fix-plan-summary')), hasEditor: Boolean(card?.querySelector('.fix-plan-card')), hasSyncNode: Boolean(node), planCount: JSON.parse(localStorage.getItem('bugpin.fix-plans.v1') || '[]').length, stateConfirmed: state?.confirmed, stateSync: state?.notionSyncStatus, stateError: state?.notionSyncError, syncMessage: node?.textContent }",
+      "수정 계획 Notion 카드 생성",
+    );
+  } catch (error) {
+    const notionRequests = environment.notion.requests.map((request) => `${request.method} ${request.path}`);
+    const planTrace = evaluate("window.__planFetchTrace || []");
+    assert.fail(`${error.message}; Notion mock requests: ${notionRequests.join(" | ")}; plan fetch: ${JSON.stringify(planTrace)}`);
+  }
+  const firstNotionSync = evaluate(`({
+    badge: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-notion-badge")?.textContent || "",
+    state: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-notion-state")?.textContent || ""
+  })`);
+  assert.equal(firstNotionSync.badge, "Notion 등록됨", firstNotionSync.state);
   let savedPlan = evaluate(`(() => {
     const plans = JSON.parse(localStorage.getItem("bugpin.fix-plans.v1"));
     const plan = plans.find(item => item.bug_id === "${firstBugId}");
@@ -459,6 +492,8 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
       summary: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-line").textContent,
       memo: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-memo").textContent,
       planBadge: document.querySelector(".bug-card:nth-of-type(1) .bug-card-plan-badge").textContent,
+      notionBadge: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-notion-badge")?.textContent,
+      notionLink: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-notion-link")?.href,
       exportEnabled: !document.querySelector(".fix-plan-export").disabled
     };
   })()`);
@@ -470,6 +505,9 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.match(savedPlan.summary, /담당 강승우 · \d+\/\d+\(.+\)까지 · 우선순위 높음/);
   assert.equal(savedPlan.memo, "OnCollisionStay2D에 피격 쿨타임 추가");
   assert.match(savedPlan.planBadge, /담당 강승우 · D-1/);
+  assert.equal(savedPlan.notionBadge, "Notion 등록됨");
+  assert.match(savedPlan.notionLink, /^https:\/\/www\.notion\.so\//);
+  assert.equal(environment.notion.pages.size, 1);
   assert.equal(savedPlan.exportEnabled, true);
 
   browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-edit");
@@ -477,6 +515,26 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(evaluate("document.querySelector('.bug-card:nth-of-type(1) .fix-plan-assignee').value"), "강승우");
   browser("click", ".bug-card:nth-of-type(1) .fix-plan-cancel");
   assert.equal(evaluate("!document.querySelector('.bug-card:nth-of-type(1) .fix-plan-card')"), true);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-edit");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-edit");
+  browser("fill", ".bug-card:nth-of-type(1) .fix-plan-memo", "노션 기존 카드를 덮어써 갱신합니다.");
+  const firstNotionPageId = [...environment.notion.pages.keys()][0];
+  const originalNotionBlocks = environment.notion.pages.get(firstNotionPageId).children.filter((block) => !block.in_trash);
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .fix-plan-save");
+  browser("click", ".bug-card:nth-of-type(1) .fix-plan-save");
+  await waitFor(
+    "return { done: document.querySelector('.bug-card:nth-of-type(1) .fix-plan-notion-badge')?.textContent === 'Notion 등록됨' && document.querySelector('.bug-card:nth-of-type(1) .fix-plan-summary-memo')?.textContent === '노션 기존 카드를 덮어써 갱신합니다.' }",
+    "기존 Notion 카드 수정",
+  );
+  assert.equal(environment.notion.pages.size, 1, "수정 저장은 카드를 중복 생성하지 않고 기존 카드를 갱신해야 합니다.");
+  const updatedNotionPage = environment.notion.pages.get(firstNotionPageId);
+  const updatedMemo = (updatedNotionPage.properties["메모"].rich_text || []).map((part) => part.text?.content || "").join("");
+  assert.equal(updatedMemo, "노션 기존 카드를 덮어써 갱신합니다.");
+  assert.ok(originalNotionBlocks.every((block) => block.in_trash), "갱신 후 이전 본문 블록은 보관되어야 합니다.");
+  const activeUpdatedBlocks = updatedNotionPage.children.filter((block) => !block.in_trash);
+  assert.ok(activeUpdatedBlocks.some((block) => block.type === "heading_2" && (block.heading_2.rich_text || []).some((part) => part.text?.content === "원인 추정")));
+  assert.ok(activeUpdatedBlocks.some((block) => block.type === "heading_2" && (block.heading_2.rich_text || []).some((part) => part.text?.content === "제보 원문")));
 
   browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-reselect-button");
   browser("click", ".bug-card:nth-of-type(1) .suspect-reselect-button");
@@ -511,7 +569,24 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   browser("click", ".bug-card:nth-of-type(3) .fix-plan-quick-date:nth-of-type(1)");
   browser("click", ".bug-card:nth-of-type(3) .fix-plan-priority[data-priority=low]");
   browser("scrollintoview", ".bug-card:nth-of-type(3) .fix-plan-save");
+  environment.notion.setMode("create-fail");
   browser("click", ".bug-card:nth-of-type(3) .fix-plan-save");
+  await waitFor(
+    "return { done: Boolean(document.querySelector('.bug-card:nth-of-type(3) .fix-plan-notion-retry')) }",
+    "Notion 오류 시 로컬 계획 유지 및 재시도 버튼",
+  );
+  const localPlanAfterNotionError = evaluate(`({
+    saved: JSON.parse(localStorage.getItem("bugpin.fix-plans.v1")).some(plan => plan.bug_id === "${thirdBugId}"),
+    error: document.querySelector(".bug-card:nth-of-type(3) .fix-plan-notion-state").textContent,
+    retryEnabled: !document.querySelector(".bug-card:nth-of-type(3) .fix-plan-notion-retry").disabled
+  })`);
+  assert.equal(localPlanAfterNotionError.saved, true);
+  assert.match(localPlanAfterNotionError.error, /Notion 등록 실패/);
+  assert.equal(localPlanAfterNotionError.retryEnabled, true);
+  environment.notion.setMode("normal");
+  browser("click", ".bug-card:nth-of-type(3) .fix-plan-notion-retry");
+  await waitFor("return { done: document.querySelector('.bug-card:nth-of-type(3) .fix-plan-notion-badge')?.textContent === 'Notion 등록됨' }", "Notion 카드 재시도 성공");
+  assert.equal(environment.notion.pages.size, 2);
   assert.equal(evaluate(`JSON.parse(localStorage.getItem("bugpin.fix-plans.v1")).find(plan => plan.bug_id === "${thirdBugId}").due_date`), planPreview.min);
 
   browser("click", ".bug-sort-button[data-sort-mode=due]");
