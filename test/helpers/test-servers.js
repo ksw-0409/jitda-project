@@ -242,7 +242,6 @@ export async function startMockNotion() {
       path: request.url,
       authorization: request.headers.authorization,
       notionVersion: request.headers["notion-version"],
-      hasAccessCodeHeader: Object.hasOwn(request.headers, "x-access-code"),
     });
     if (mode === "permission-denied") {
       response.writeHead(403, { "Content-Type": "application/json" });
@@ -290,7 +289,6 @@ export async function startBugPinServer(mockUrl, options = {}) {
       PORT: String(port),
       LLM_API_KEY: "bugpin-test-only-key",
       LLM_BASE_URL: mockUrl,
-      NOTION_README_PRIVATE_DEPLOYMENT: options.notionPrivate ? "true" : "",
       NOTION_TOKEN: options.notionToken || "",
       NOTION_PAGE_ID: options.notionPageId || "",
       NOTION_API_BASE_URL: options.notionApiBaseUrl || "",
@@ -327,11 +325,10 @@ export async function startBugPinTestEnvironment(options = {}) {
   const mock = await startMockLlm();
   let notion = null;
   try {
-    if (options.notionPrivate) notion = await startMockNotion();
+    if (options.notionConfigured) notion = await startMockNotion();
     const app = await startBugPinServer(mock.url, {
-      notionPrivate: options.notionPrivate,
-      notionToken: options.notionPrivate ? "notion-test-only-token" : "",
-      notionPageId: options.notionPrivate ? "11111111-2222-4333-8444-555555555555" : "",
+      notionToken: options.notionConfigured ? "notion-test-only-token" : "",
+      notionPageId: options.notionConfigured ? "11111111-2222-4333-8444-555555555555" : "",
       notionApiBaseUrl: notion?.url,
     });
     return {

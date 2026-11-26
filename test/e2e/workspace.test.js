@@ -32,7 +32,7 @@ async function waitFor(predicate, description, timeoutMs = 12_000) {
 }
 
 before(async () => {
-  environment = await startBugPinTestEnvironment({ notionPrivate: true });
+  environment = await startBugPinTestEnvironment({ notionConfigured: true });
   browserSession = `bugpin-e2e-${process.pid}`;
   browser("open", environment.app.url);
 });
@@ -87,16 +87,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(notionLoaded.markdown, notionMarkdown);
   assert.match(notionLoaded.status, /노션 README를 불러왔습니다/);
   assert.equal(notionLoaded.ready, true);
-  const noAccessCodeExposure = evaluate(`({
-    accessCodeInput: Boolean(document.querySelector("#notion-access-code-input")),
-    accessCodeForm: Boolean(document.querySelector("#notion-access-form")),
-    accessCodeSessionKey: sessionStorage.getItem("bugpin.notion-access-code")
-  })`);
-  assert.equal(noAccessCodeExposure.accessCodeInput, false);
-  assert.equal(noAccessCodeExposure.accessCodeForm, false);
-  assert.equal(noAccessCodeExposure.accessCodeSessionKey, null);
   assert.equal(environment.notion.requests.at(-1).authorization, "Bearer notion-test-only-token");
-  assert.equal(environment.notion.requests.at(-1).hasAccessCodeHeader, false);
 
   browser("eval", `(() => {
     window.__notionReadmeFetchOriginal = window.fetch.bind(window);

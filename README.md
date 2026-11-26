@@ -115,7 +115,6 @@ npm run dev
 | `GITHUB_TOKEN` | 선택 | 비공개 저장소 접근이나 GitHub API 한도 확대에 사용합니다. 공개 저장소는 토큰 없이도 조회할 수 있습니다. 저장소 읽기 권한만 부여하세요. |
 | `NOTION_TOKEN` | Notion 기능 사용 시 필수 | Notion internal integration 토큰입니다. 서버에서만 사용합니다. |
 | `NOTION_PAGE_ID` | Notion 기능 사용 시 필수 | README 본문을 가져올 Notion 일반 페이지 한 개의 ID입니다. |
-| `NOTION_README_PRIVATE_DEPLOYMENT` | 선택, 안전 설정 | `true`일 때만 지정된 Notion README 읽기 API를 활성화합니다. 팀 전용으로 배포한 환경에서만 켜세요. |
 | `PORT` | 선택 | 서버 포트입니다. 기본값은 `3000`입니다. |
 
 ```dotenv
@@ -124,8 +123,6 @@ LLM_BASE_URL=
 GITHUB_TOKEN=
 NOTION_TOKEN=
 NOTION_PAGE_ID=
-# Set true only for the intended private/team deployment.
-NOTION_README_PRIVATE_DEPLOYMENT=
 # PORT=3000
 ```
 
@@ -171,7 +168,9 @@ Notion README 불러오기는 서버 환경 변수로 지정한 일반 페이지
 
 짓다 배포의 서버 환경 변수 설정 화면에서 위 값을 등록하세요. 브라우저 코드, 요청 응답, 로그에 토큰을 직접 넣지 마세요. 저장된 `NOTION_TOKEN`은 서버가 Notion API를 호출할 때만 사용하고, `NOTION_PAGE_ID`는 가져올 페이지를 지정합니다.
 
-앱에는 사용자 계정 로그인이 없습니다. `/api/notion/readme`는 `NOTION_README_PRIVATE_DEPLOYMENT=true`일 때만 활성화되고, 기본값에서는 404로 비활성 상태를 반환합니다. 실제 Notion 연동 배포는 팀 전용 네트워크나 게이트웨이 뒤에 배치하세요. `NOTION_README_PRIVATE_DEPLOYMENT`는 기능을 켜는 설정이며 사용자 로그인이나 인증을 제공하지 않습니다.
+`NOTION_TOKEN`과 `NOTION_PAGE_ID`를 서버 환경 변수에 설정하면 `/api/notion/readme`를 별도 기능 플래그 없이 바로 사용할 수 있습니다. 두 변수 중 하나라도 빠졌다면 API가 `503` 설정 안내를 반환합니다.
+
+보안 주의: BugPin에는 로그인이 없으므로 서버에 Notion 토큰과 페이지 ID를 설정하면 `/api/notion/readme`에 접근할 수 있는 모든 사람이 연결된 페이지 본문을 읽을 수 있습니다. 비공개 프로젝트 README를 사용할 때는 앱 자체에 인증/접근 제한을 추가하거나 팀 전용 네트워크 뒤에서 실행하세요. Notion integration은 필요한 페이지에만 공유하고, 민감한 페이지를 연결하지 마세요.
 
 Notion API 응답에 Markdown 본문이 비어 있으면 422, integration 인증이 잘못되면 401, 페이지 공유 권한이 없으면 403, 페이지 ID를 찾지 못하면 404로 안내합니다. 실패한 경우 화면에 이미 불러온 README 본문은 유지됩니다.
 
@@ -198,7 +197,7 @@ https://github.com/<owner>/<repo>/tree/<branch>
 | `/api/github/file` | 연결된 저장소의 C# 파일 읽기 | `connectionId`, `path` |
 | `/api/github/analyze-code` | 실제 GitHub 코드 기반 위치 분석 | `connectionId`, `bugs` |
 | `/api/locate-again` | 개발자 피드백을 반영해 다른 후보 재탐색 | `bug`, `reports`, `feedback`, `excluded`, `seen_candidates`, `round`, `readme` 또는 `connectionId`; GitHub에서는 선택적으로 `seen_files` · `POST` |
-| `/api/notion/readme` | 지정 Notion 페이지의 Markdown 본문 가져오기 | 서버 환경 변수 `NOTION_TOKEN`, `NOTION_PAGE_ID`; 활성화 설정 `NOTION_README_PRIVATE_DEPLOYMENT` · `GET` |
+| `/api/notion/readme` | 설정된 Notion 페이지의 Markdown 본문 가져오기 | 서버 환경 변수 `NOTION_TOKEN`, `NOTION_PAGE_ID` · `GET` |
 
 ### `/api/analyze`
 
@@ -232,7 +231,7 @@ README에 적힌 스크립트 이름만 허용합니다. 각 버그 결과는 `{
 
 ### `/api/notion/readme`
 
-이 경로는 `GET` 요청이며 `NOTION_README_PRIVATE_DEPLOYMENT=true`일 때만 동작합니다. 앱 자체에는 사용자 인증이 없으므로 팀 전용 배포/접근 제어가 적용된 환경에서만 켜야 합니다. 활성화된 배포에서 서버가 아래 Notion API를 호출합니다.
+이 경로는 `GET` 요청입니다. `NOTION_TOKEN`과 `NOTION_PAGE_ID`가 서버에 설정되어 있으면 별도 활성화 플래그 없이 서버가 아래 Notion API를 호출합니다. 설정이 누락되면 `503`을 반환합니다. 앱에는 로그인이 없으므로 비공개 페이지를 연결할 때는 배포 환경 자체를 보호하세요.
 
 ```text
 GET https://api.notion.com/v1/pages/{NOTION_PAGE_ID}/markdown
@@ -240,7 +239,7 @@ Authorization: Bearer <NOTION_TOKEN>
 Notion-Version: 2026-03-11
 ```
 
-비활성화 상태에서는 `404`입니다. Notion API의 `markdown` 본문 문자열을 `{ "markdown": "..." }` 형태로 반환하며 제목이나 요약만 반환하지 않습니다. `NOTION_TOKEN`은 서버에서만 사용하며 응답이나 로그에 기록하지 않습니다.
+`NOTION_TOKEN` 또는 `NOTION_PAGE_ID`가 설정되지 않았으면 `503`을 반환합니다. Notion API의 `markdown` 본문 문자열을 `{ "markdown": "..." }` 형태로 반환하며 제목이나 요약만 반환하지 않습니다. `NOTION_TOKEN`은 서버에서만 사용하며 응답이나 로그에 기록하지 않습니다.
 
 ### `/api/github/connect`와 `/api/github/file`
 

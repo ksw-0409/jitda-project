@@ -71,10 +71,6 @@ function readJsonBody(request) {
   });
 }
 
-function notionReadmeRouteIsEnabled() {
-  return process.env.NOTION_README_PRIVATE_DEPLOYMENT?.trim().toLowerCase() === "true";
-}
-
 function validNotionPageId(value) {
   return typeof value === "string" && /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(value);
 }
@@ -103,10 +99,6 @@ function getNotionMarkdownEndpoint(pageId) {
 }
 
 async function fetchNotionReadmeMarkdown() {
-  if (!notionReadmeRouteIsEnabled()) {
-    throw new HttpError(404, "Notion README는 팀 접근 제한이 적용된 전용 환경에서만 사용할 수 있습니다.");
-  }
-
   const token = process.env.NOTION_TOKEN?.trim();
   const pageId = process.env.NOTION_PAGE_ID?.trim();
   if (!token) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
