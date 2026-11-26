@@ -284,15 +284,17 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(afterUndo.restoredCandidate, true);
   assert.equal(afterUndo.newCandidate, true);
 
-  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-list .suspect-item:nth-of-type(2) .suspect-card-action.is-confirm");
-  browser("click", ".bug-card:nth-of-type(1) .suspect-item:nth-of-type(2) .suspect-card-action.is-confirm");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-selection-card:nth-of-type(2)");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-selection-card:nth-of-type(2)");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
   const confirmed = evaluate(`(() => {
     const state = window.bugPinLocationStates.get("${firstBugId}");
     const card = document.querySelector(".bug-card:nth-of-type(1)");
     return {
       status: card.querySelector(".suspect-confidence").textContent,
       confirmedFile: state.confirmedLocation?.file,
-      badge: card.querySelector(".suspect-confirmed-badge")?.textContent,
+      badge: card.querySelector(".suspect-confirmed-section .suspect-confirmed-badge")?.textContent,
       stateRetained: state.candidates.some(candidate => candidate.file === "PlayerMovement.cs")
     };
   })()`);
@@ -424,4 +426,255 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   environment.mock.setMode("normal");
   browser("reload");
   await waitFor("return { done: document.querySelector('#panel-summary-list') !== null }", "페이지 재로드");
+});
+
+test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·버그 카드 배지를 유지한다", async () => {
+  environment.mock.setMode("normal");
+  browser("set", "viewport", "1280", "900");
+  browser("reload");
+  await waitFor("return { done: document.querySelector('#load-sample') !== null }", "다중 후보 E2E 시작");
+  browser("click", "#load-sample");
+  browser("wait", "200");
+  browser("click", "#analyze-reports");
+  await waitFor("return { done: document.querySelector('#analyze-reports').textContent === '분석 다시 시작' }", "다중 후보용 버그 그룹화");
+  browser("scrollintoview", "#load-sample-readme");
+  browser("click", "#load-sample-readme");
+  browser("wait", "150");
+  environment.mock.setMode("multi-candidate");
+  browser("scrollintoview", "#locate-suspects");
+  browser("click", "#locate-suspects");
+  await waitFor(
+    "return { done: !document.querySelector('#locate-suspects').disabled && window.bugPinLocationStates.get(window.bugPinAnalysis.bugs[0].bug_id).candidates.length === 2 }",
+    "두 개 후보가 있는 의심 위치 분석",
+  );
+
+  const firstBugId = evaluate("window.bugPinAnalysis.bugs[0].bug_id");
+  const candidateCardSelector = ".bug-card:nth-of-type(1) .suspect-selection-card";
+  const firstCandidateSelector = `${candidateCardSelector}:nth-of-type(1)`;
+  const secondCandidateSelector = `${candidateCardSelector}:nth-of-type(2)`;
+  browser("scrollintoview", ".bug-card:nth-of-type(1) > summary");
+  browser("click", ".bug-card:nth-of-type(1) > summary");
+  const selectionMode = evaluate(`(() => {
+    const cards = [...document.querySelectorAll("${candidateCardSelector}")];
+    return {
+      hint: document.querySelector(".bug-card:nth-of-type(1) .suspect-selection-heading").textContent,
+      count: cards.length,
+      controlTypes: cards.map(card => card.querySelector(".suspect-selection-control").type),
+      individualConfirmButtons: cards.reduce((sum, card) => sum + card.querySelectorAll(".is-confirm").length, 0),
+      excludeButtons: cards.reduce((sum, card) => sum + card.querySelectorAll(".is-exclude").length, 0),
+      displayedOrder: cards.map(card => [...card.querySelectorAll(".suspect-code-field code")].map(node => node.textContent)[0]),
+      confidenceOrder: cards.map(card => card.querySelector(".suspect-confidence-detail")?.textContent || ""),
+      confirmDisabledInitially: document.querySelector(".suspect-selection-confirm").disabled
+    };
+  })()`);
+  assert.equal(selectionMode.count, 2);
+  assert.match(selectionMode.hint, /후보 2개 · 실제 원인으로 보이는 위치를 하나 선택하세요/);
+  assert.deepEqual(selectionMode.controlTypes, ["radio", "radio"]);
+  assert.equal(selectionMode.individualConfirmButtons, 0);
+  assert.equal(selectionMode.excludeButtons, 2);
+  assert.equal(selectionMode.confirmDisabledInitially, true);
+  assert.equal(selectionMode.displayedOrder[0], "GameManager.cs");
+  assert.match(selectionMode.confidenceOrder[0], /높음/);
+  assert.match(selectionMode.confidenceOrder[1], /낮음/);
+
+  browser("scrollintoview", firstCandidateSelector);
+  browser("click", firstCandidateSelector);
+  let selection = evaluate(`(() => {
+    const cards = [...document.querySelectorAll("${candidateCardSelector}")];
+    return {
+      selected: cards.map(card => card.getAttribute("aria-checked")),
+      selectedBadge: cards[0].querySelector(".suspect-selected-label")?.textContent,
+      selectedClass: cards[0].classList.contains("is-selected"),
+      dimmedClass: cards[1].classList.contains("is-dimmed"),
+      dimmedOpacity: getComputedStyle(cards[1]).opacity,
+      confirmDisabled: document.querySelector(".suspect-selection-confirm").disabled
+    };
+  })()`);
+  assert.deepEqual(selection.selected, ["true", "false"]);
+  assert.equal(selection.selectedBadge, "선택됨");
+  assert.equal(selection.selectedClass, true);
+  assert.equal(selection.dimmedClass, true);
+  assert.equal(selection.dimmedOpacity, "0.6");
+  assert.equal(selection.confirmDisabled, false);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle input");
+  selection = evaluate(`({
+    multiEnabled: document.querySelector(".bug-card:nth-of-type(1) .suspect-multi-select-toggle input").checked,
+    controlTypes: [...document.querySelectorAll("${candidateCardSelector} .suspect-selection-control")].map(control => control.type)
+  })`);
+  assert.equal(selection.multiEnabled, true);
+  assert.deepEqual(selection.controlTypes, ["checkbox", "checkbox"]);
+
+  browser("scrollintoview", secondCandidateSelector);
+  browser("click", secondCandidateSelector);
+  selection = evaluate(`JSON.stringify({
+    selected: [...document.querySelectorAll("${candidateCardSelector}")].filter(card => card.getAttribute("aria-checked") === "true").length,
+    confirmDisabled: document.querySelector(".suspect-selection-confirm").disabled
+  })`);
+  selection = JSON.parse(selection);
+  assert.equal(selection.selected, 2);
+  assert.equal(selection.confirmDisabled, false);
+
+  browser("click", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle input");
+  selection = evaluate(`JSON.stringify({
+    multiEnabled: document.querySelector(".bug-card:nth-of-type(1) .suspect-multi-select-toggle input").checked,
+    selected: [...document.querySelectorAll("${candidateCardSelector}")].filter(card => card.getAttribute("aria-checked") === "true").length,
+    confirmDisabled: document.querySelector(".suspect-selection-confirm").disabled
+  })`);
+  selection = JSON.parse(selection);
+  assert.equal(selection.multiEnabled, false);
+  assert.equal(selection.selected, 1);
+  assert.equal(selection.confirmDisabled, false);
+
+  browser("scrollintoview", `${secondCandidateSelector} .suspect-card-action.is-exclude`);
+  browser("click", `${secondCandidateSelector} .suspect-card-action.is-exclude`);
+  const individuallyExcluded = evaluate(`(() => {
+    const state = window.bugPinLocationStates.get("${firstBugId}");
+    return {
+      activeCount: state.candidates.length,
+      excludedCount: state.excluded.length,
+      excludedFile: state.excluded[0]?.file,
+      singleCandidateConfirmButton: document.querySelector(".bug-card:nth-of-type(1) .suspect-card-action.is-confirm")?.textContent
+    };
+  })()`);
+  assert.equal(individuallyExcluded.activeCount, 1);
+  assert.equal(individuallyExcluded.excludedCount, 1);
+  assert.equal(individuallyExcluded.excludedFile, "PlayerMovement.cs");
+  assert.equal(individuallyExcluded.singleCandidateConfirmButton, "여기 맞음");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-excluded > summary");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-undo-button");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-undo-button");
+  const restoredCandidate = evaluate(`(() => {
+    const state = window.bugPinLocationStates.get("${firstBugId}");
+    return { activeCount: state.candidates.length, excludedCount: state.excluded.length, candidates: state.candidates.map(candidate => candidate.file) };
+  })()`);
+  assert.equal(restoredCandidate.activeCount, 2);
+  assert.equal(restoredCandidate.excludedCount, 0);
+  assert.ok(restoredCandidate.candidates.includes("PlayerMovement.cs"));
+  assert.ok(restoredCandidate.candidates.includes("GameManager.cs"));
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  let confirmed = evaluate(`(() => {
+    const state = window.bugPinLocationStates.get("${firstBugId}");
+    const card = document.querySelector(".bug-card:nth-of-type(1)");
+    const badge = card.querySelector(".bug-card-location-badge");
+    const alternatives = card.querySelector(".suspect-other-candidates");
+    return {
+      status: card.querySelector(".suspect-confidence").textContent,
+      confirmed: state.confirmed,
+      confirmedCount: state.confirmedCandidateIds.length,
+      confirmedCard: card.querySelector(".suspect-confirmed-section .suspect-confirmed-heading")?.textContent,
+      activeSelectionList: card.querySelector(".suspect-selection-mode"),
+      alternativesSummary: alternatives?.querySelector("summary")?.textContent,
+      alternativesClosed: alternatives ? !alternatives.open : false,
+      summaryBadgeVisible: !badge.hidden,
+      summaryBadgeText: badge.textContent
+    };
+  })()`);
+  assert.equal(confirmed.status, "위치 확정");
+  assert.equal(confirmed.confirmed, true);
+  assert.equal(confirmed.confirmedCount, 1);
+  assert.match(confirmed.confirmedCard, /확정 위치/);
+  assert.equal(confirmed.activeSelectionList, null);
+  assert.equal(confirmed.alternativesSummary, "다른 후보 보기 (1)");
+  assert.equal(confirmed.alternativesClosed, true);
+  assert.equal(confirmed.summaryBadgeVisible, true);
+  assert.match(confirmed.summaryBadgeText, /위치 확정 · GameManager\.cs/);
+
+  browser("click", ".bug-card:nth-of-type(1) .suspect-reselect-button");
+  let reselected = evaluate(`({
+    confirmed: window.bugPinLocationStates.get("${firstBugId}").confirmed,
+    selectionModeVisible: Boolean(document.querySelector(".bug-card:nth-of-type(1) .suspect-selection-mode")),
+    retainedSelected: [...document.querySelectorAll("${candidateCardSelector}")].filter(card => card.getAttribute("aria-checked") === "true").length,
+    summaryBadgeHidden: document.querySelector(".bug-card-location-badge").hidden
+  })`);
+  assert.equal(reselected.confirmed, false);
+  assert.equal(reselected.selectionModeVisible, true);
+  assert.equal(reselected.retainedSelected, 1);
+  assert.equal(reselected.summaryBadgeHidden, true);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle input");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle input");
+  browser("scrollintoview", secondCandidateSelector);
+  browser("click", secondCandidateSelector);
+  reselected = evaluate(`JSON.stringify({
+    multiEnabled: document.querySelector(".bug-card:nth-of-type(1) .suspect-multi-select-toggle input").checked,
+    selected: [...document.querySelectorAll("${candidateCardSelector}")].filter(card => card.getAttribute("aria-checked") === "true").length
+  })`);
+  reselected = JSON.parse(reselected);
+  assert.equal(reselected.multiEnabled, true);
+  assert.equal(reselected.selected, 2);
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-selection-confirm");
+  confirmed = evaluate(`(() => {
+    const state = window.bugPinLocationStates.get("${firstBugId}");
+    const badge = document.querySelector(".bug-card:nth-of-type(1) .bug-card-location-badge");
+    return { confirmedCount: state.confirmedCandidateIds.length, badge: badge.textContent, otherSummary: document.querySelector(".bug-card:nth-of-type(1) .suspect-other-candidates")?.querySelector("summary")?.textContent || null };
+  })()`);
+  assert.equal(confirmed.confirmedCount, 2);
+  assert.match(confirmed.badge, /GameManager\.cs/);
+  assert.match(confirmed.badge, /PlayerMovement\.cs/);
+  assert.equal(confirmed.otherSummary, null);
+
+  browser("scrollintoview", ".bug-card:nth-of-type(2) > summary");
+  browser("click", ".bug-card:nth-of-type(2) > summary");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) > summary");
+  browser("click", ".bug-card:nth-of-type(1) > summary");
+  assert.equal(evaluate(`window.bugPinLocationStates.get("${firstBugId}").confirmedCandidateIds.length`), 2);
+  assert.equal(evaluate(`document.querySelector(".bug-card:nth-of-type(1) .bug-card-location-badge").hidden`), false);
+
+  browser("set", "viewport", "375", "812");
+  const mobile = evaluate(`({ width: innerWidth, pageWidth: document.documentElement.scrollWidth, candidateCards: document.querySelectorAll(".bug-card:nth-of-type(1) .suspect-selection-card").length, badgeVisible: !document.querySelector(".bug-card:nth-of-type(1) .bug-card-location-badge").hidden })`);
+  assert.equal(mobile.width, 375);
+  assert.equal(mobile.pageWidth, 375);
+  assert.equal(mobile.badgeVisible, true);
+
+  browser("set", "viewport", "1280", "900");
+  browser("eval", `document.querySelector(".bug-card:nth-of-type(1)").open = true; true`);
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-reselect-button");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-reselect-button");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-selection-reject");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-selection-reject");
+  assert.equal(evaluate("!document.querySelector('.bug-card:nth-of-type(1) .suspect-feedback-form[data-feedback-form=all-candidates]').hidden"), true);
+  browser("click", ".bug-card:nth-of-type(1) .suspect-feedback-form[data-feedback-form=all-candidates] .suspect-feedback-chip:nth-of-type(3)");
+  browser("fill", ".bug-card:nth-of-type(1) .suspect-feedback-form[data-feedback-form=all-candidates] .suspect-feedback-text", "두 후보 모두 직접 원인 같지 않아 다른 처리 경로를 확인해 주세요.");
+  browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-feedback-form[data-feedback-form=all-candidates] .suspect-feedback-submit");
+  browser("click", ".bug-card:nth-of-type(1) .suspect-feedback-form[data-feedback-form=all-candidates] .suspect-feedback-submit");
+  await waitFor(
+    `const state = window.bugPinLocationStates.get("${firstBugId}"); return { done: !state.searching && state.excluded.length === 2 && state.round === 2 }`,
+    "모든 후보 제외 후 재탐색",
+  );
+  const allRejected = evaluate(`(() => {
+    const state = window.bugPinLocationStates.get("${firstBugId}");
+    const card = document.querySelector(".bug-card:nth-of-type(1)");
+    return {
+      excludedFiles: state.excluded.map(candidate => candidate.file),
+      reasons: state.excluded.map(candidate => candidate.reasons),
+      freeTexts: state.excluded.map(candidate => candidate.free_text),
+      activeCandidates: state.candidates.map(candidate => candidate.file),
+      round: state.round,
+      newRoundLabels: [...card.querySelectorAll(".suspect-candidate-label")].map(node => node.textContent)
+    };
+  })()`);
+  assert.deepEqual(new Set(allRejected.excludedFiles), new Set(["PlayerMovement.cs", "GameManager.cs"]));
+  assert.ok(allRejected.reasons.every((reasons) => reasons.includes("증상과 로직이 안 맞음")));
+  assert.ok(allRejected.freeTexts.every((text) => text.includes("두 후보 모두")));
+  assert.ok(allRejected.activeCandidates.length > 0);
+  assert.equal(allRejected.round, 2);
+  assert.ok(allRejected.newRoundLabels.every((label) => label.includes("2차 탐색")));
+  browser("set", "viewport", "375", "812");
+  const mobileSelection = evaluate(`({
+    width: innerWidth,
+    pageWidth: document.documentElement.scrollWidth,
+    candidateCount: document.querySelectorAll(".bug-card:nth-of-type(1) .suspect-selection-card").length,
+    actionbarVisible: Boolean(document.querySelector(".bug-card:nth-of-type(1) .suspect-selection-actionbar")),
+    multipleToggleVisible: Boolean(document.querySelector(".bug-card:nth-of-type(1) .suspect-multi-select-toggle"))
+  })`);
+  assert.equal(mobileSelection.width, 375);
+  assert.equal(mobileSelection.pageWidth, 375);
+  assert.ok(mobileSelection.candidateCount >= 2);
+  assert.equal(mobileSelection.actionbarVisible, true);
+  assert.equal(mobileSelection.multipleToggleVisible, true);
 });

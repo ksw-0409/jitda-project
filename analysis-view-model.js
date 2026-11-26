@@ -102,6 +102,7 @@ export function getReadmeLocationPresentation(location, isTemporary = false) {
       script: suspect.script || "스크립트 미특정",
       function: suspect.function || "함수 미특정",
       reason: suspect.reason || "근거 확인 필요",
+      confidence: suspect.confidence || location?.confidence || "",
       label: "README 기반 의심 후보",
       reasonLabel: "의심 이유 (README 기능 설명 기반)",
     })),

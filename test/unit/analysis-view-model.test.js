@@ -110,6 +110,7 @@ test("README 후보는 후보 상태와 설명만 제공하고 실제 코드 줄
       script: "PlayerMovement.cs",
       function: "Update()",
       reason: "README에서 플레이어 이동을 담당한다고 설명합니다.",
+      confidence: "높음",
     }],
     confidence: "높음",
   });
@@ -121,6 +122,7 @@ test("README 후보는 후보 상태와 설명만 제공하고 실제 코드 줄
     script: "PlayerMovement.cs",
     function: "Update()",
     reason: "README에서 플레이어 이동을 담당한다고 설명합니다.",
+    confidence: "높음",
     label: "README 기반 의심 후보",
     reasonLabel: "의심 이유 (README 기능 설명 기반)",
   });

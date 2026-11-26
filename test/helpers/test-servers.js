@@ -75,7 +75,7 @@ function parseLocationPrompt(content) {
   return JSON.parse(content.slice(bugStart + "버그 묶음:\n".length, readmeStart));
 }
 
-function fakeLocations(bugs) {
+function fakeLocations(bugs, multipleCandidates = false) {
   const guesses = [
     { script: "PlayerMovement.cs", function: "Update()", reason: "이동 입력과 방향을 처리하는 기능입니다." },
     { script: "MonsterHealth.cs", function: "Die()", reason: "몬스터의 사망 상태를 관리하는 기능입니다." },
@@ -85,11 +85,24 @@ function fakeLocations(bugs) {
   ];
   const byBugId = new Map(guesses.map((suspect, index) => [`BUG-${index + 1}`, suspect]));
   return {
-    results: bugs.map((bug) => ({
-      bug_id: bug.bug_id,
-      suspects: byBugId.has(bug.bug_id) ? [byBugId.get(bug.bug_id)] : [],
-      confidence: byBugId.has(bug.bug_id) ? "보통" : "낮음",
-    })),
+    results: bugs.map((bug, index) => {
+      const suspect = byBugId.get(bug.bug_id);
+      const suspects = suspect ? [suspect] : [];
+      if (multipleCandidates && index === 0 && suspect) {
+        suspects[0] = { ...suspect, confidence: "낮음" };
+        suspects.push({
+          script: "GameManager.cs",
+          function: "Update()",
+          reason: "게임 진행 상태와 입력 흐름을 갱신해 이동 입력 전달 경로를 함께 확인할 수 있습니다.",
+          confidence: "높음",
+        });
+      }
+      return {
+        bug_id: bug.bug_id,
+        suspects,
+        confidence: suspect ? "보통" : "낮음",
+      };
+    }),
   };
 }
 
@@ -143,7 +156,7 @@ function fakeProviderPayload(mode, requestBody) {
   }
 
   const bugs = parseLocationPrompt(locationPrompt || "");
-  const result = fakeLocations(bugs);
+  const result = fakeLocations(bugs, mode === "multi-candidate");
   return { status: 200, body: { choices: [{ message: { content: JSON.stringify(result) } }] } };
 }
 

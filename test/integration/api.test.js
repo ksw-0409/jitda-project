@@ -78,6 +78,7 @@ test("/api/locate 응답의 후보와 결과 없음 상태를 README 화면 표�
   assert.equal(firstView.candidates[0].script, "PlayerMovement.cs");
   assert.equal(firstView.candidates[0].function, "Update()");
   assert.match(firstView.candidates[0].reason, /이동/);
+  assert.equal(firstView.candidates[0].confidence, first.confidence);
   assert.equal("line_start" in firstView.candidates[0], false);
   assert.equal("line" in firstView.candidates[0], false);
 

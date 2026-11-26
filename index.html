@@ -569,6 +569,41 @@
   .suspect-code-note { margin: 10px 0 0; color: #705d3d; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
   .suspect-code-note[data-status="code_missing_suspected"] { color: #8a442b; }
   .suspect-confirmed-badge { display: inline-flex; min-height: 23px; flex: 0 0 auto; align-items: center; padding: 3px 8px; border-radius: 20px; background: #e1f0dc; color: #32603a; font-size: 10px; font-weight: 760; }
+  .bug-card-location-badge { display: inline-flex; width: fit-content; max-width: 100%; align-items: center; margin-top: 5px; padding: 4px 8px; overflow-wrap: anywhere; border-radius: 7px; background: #e4f1df; color: #315c38; font-size: 10px; font-weight: 720; line-height: 1.4; }
+  .bug-card-location-badge[hidden] { display: none; }
+  .suspect-confirmed-section { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid #cfe3ca; border-radius: 11px; background: #f1f8ee; }
+  .suspect-confirmed-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; color: #365b3c; font-size: 13px; font-weight: 760; }
+  .suspect-confirmed-item { padding: 9px; border: 1px solid #dce9d8; border-radius: 8px; background: #fff; }
+  .suspect-confirmed-item .suspect-card-actions { display: none; }
+  .suspect-reselect-button { min-height: 36px; padding: 6px 10px; border: 1px solid #d3e0d0; border-radius: 7px; background: #fff; color: #466049; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
+  .suspect-reselect-button:hover { background: #edf5e9; }
+  .suspect-other-candidates { margin-top: 10px; border: 1px solid #e1e7df; border-radius: 9px; background: #fbfcfa; }
+  .suspect-other-candidates > summary { min-height: 40px; padding: 11px 12px; color: #667267; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .suspect-other-candidates > .suspect-list { padding: 0 12px 12px; }
+  .suspect-selection-heading { margin: 10px 0 5px; color: #45604a; font-size: 12px; font-weight: 750; line-height: 1.55; }
+  .suspect-multi-select-toggle { display: flex; min-height: 38px; align-items: center; gap: 8px; color: #58675b; font-size: 11px; font-weight: 630; cursor: pointer; }
+  .suspect-multi-select-toggle input { width: 16px; height: 16px; accent-color: var(--forest); }
+  .suspect-selection-list { display: grid; gap: 9px; margin: 9px 0 0; padding: 0; list-style: none; }
+  .suspect-selection-card { position: relative; min-width: 0; padding: 11px; border: 1px solid #dfe7dc; border-radius: 11px; background: #fff; cursor: pointer; transition: opacity 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
+  .suspect-selection-card.is-selected { border: 2px solid #6e9a65; padding: 10px; background: #f8fcf6; box-shadow: 0 0 0 2px rgba(110, 154, 101, .11); }
+  .suspect-selection-card.is-dimmed { opacity: .6; }
+  .suspect-selection-card:focus-visible { outline: 3px solid #92b884; outline-offset: 2px; }
+  .suspect-selection-top { display: flex; align-items: center; gap: 9px; min-height: 28px; margin-bottom: 8px; }
+  .suspect-selection-control { width: 17px; height: 17px; flex: 0 0 auto; accent-color: #35643c; pointer-events: none; }
+  .suspect-selected-label { display: inline-flex; min-height: 22px; align-items: center; padding: 3px 7px; border-radius: 20px; background: #e1f0dc; color: #32603a; font-size: 10px; font-weight: 740; }
+  .suspect-selection-card .suspect-item { padding-top: 0; border-top: 0; }
+  .suspect-selection-card .suspect-card-actions { margin-top: 8px; }
+  .suspect-card-action.is-exclude { min-height: 32px; padding: 3px 1px; border: 0; background: transparent; color: #788078; font-size: 10px; text-decoration: underline; text-underline-offset: 2px; }
+  .suspect-card-action.is-exclude:hover:not(:disabled) { background: transparent; color: #8b473b; }
+  .suspect-selection-actionbar { position: sticky; z-index: 2; bottom: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin: 12px -3px -3px; padding: 11px 3px 3px; border-top: 1px solid #e0e8dd; background: linear-gradient(180deg, rgba(247, 250, 245, .88), #f7faf5 28%); }
+  .suspect-selection-confirm, .suspect-selection-reject { min-height: 42px; padding: 8px 10px; border-radius: 8px; font: inherit; font-size: 11px; font-weight: 730; cursor: pointer; }
+  .suspect-selection-confirm { border: 0; background: var(--forest); color: #fff; }
+  .suspect-selection-confirm:hover:not(:disabled) { background: #2d4d40; }
+  .suspect-selection-confirm:disabled { cursor: not-allowed; opacity: .48; }
+  .suspect-selection-reject { border: 1px solid #dce4d9; background: #fff; color: #58665b; }
+  .suspect-selection-reject:disabled { cursor: not-allowed; opacity: .55; }
+  .suspect-selection-actionbar .suspect-multi-select-toggle { grid-column: 1 / -1; }
+  .suspect-selection-actionbar .suspect-feedback-form { grid-column: 1 / -1; margin-top: 0; }
   .suspect-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .suspect-card-action { min-height: 40px; padding: 8px 12px; border: 1px solid #dce5d9; border-radius: 8px; background: #fff; color: #4c6250; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
   .suspect-card-action:hover:not(:disabled) { background: #eef5eb; }
@@ -1203,12 +1238,12 @@
       }
     }
 
-    function codeEvidenceNode(candidate, index, round = 1) {
+    function codeEvidenceNode(candidate, index, round = 1, labelOverride = "") {
       const item = document.createElement("li");
       item.className = "suspect-item";
       const candidateLabel = document.createElement("p");
       candidateLabel.className = "suspect-candidate-label";
-      candidateLabel.textContent = round > 1 ? `${round}차 탐색 · 실제 코드 후보 ${index + 1}` : `실제 코드 후보 ${index + 1}`;
+      candidateLabel.textContent = labelOverride || (round > 1 ? `${round}차 탐색 · 실제 코드 후보 ${index + 1}` : `실제 코드 후보 ${index + 1}`);
       const heading = document.createElement("div");
       heading.className = "suspect-code-identity";
       const fileField = document.createElement("div");
@@ -1273,14 +1308,14 @@
       return item;
     }
 
-    function readmeCandidateNode(suspect, index, round = 1) {
+    function readmeCandidateNode(suspect, index, round = 1, labelOverride = "") {
       const item = document.createElement("li");
       item.className = "suspect-item";
       const candidateLabel = document.createElement("p");
       candidateLabel.className = "suspect-candidate-label";
-      candidateLabel.textContent = round > 1
+      candidateLabel.textContent = labelOverride || (round > 1
         ? `README 기반 ${round}차 탐색 후보 ${index + 1}`
-        : `README 기반 의심 후보 ${index + 1}`;
+        : `README 기반 의심 후보 ${index + 1}`);
       const heading = document.createElement("div");
       heading.className = "suspect-code-identity";
       const scriptField = document.createElement("div");
@@ -1357,6 +1392,10 @@
         excluded: [],
         pendingRejection: null,
         round: 1,
+        selectedCandidateIds: [],
+        multiSelect: false,
+        confirmed: false,
+        confirmedCandidateIds: [],
         confirmedLocation: null,
         feedbackDrafts: new Map(),
         feedbackOpenFor: null,
@@ -1382,15 +1421,15 @@
 
     function locationStatusFor(state) {
       if (state.searching) return { label: "재탐색 중", kind: "reanalyzing" };
-      if (state.confirmedLocation) return { label: "위치 확정", kind: "confirmed" };
+      if (state.confirmed || state.confirmedLocation) return { label: "위치 확정", kind: "confirmed" };
       if (state.candidates.length > 0) return getSuspectStatusPresentation("candidate");
       return getSuspectStatusPresentation(state.baseStatus || "location_unavailable");
     }
 
-    function buildLocationFeedbackForm(bugId, state, draftId, title, candidate = null) {
+    function buildLocationFeedbackForm(bugId, state, draftId, title, candidate = null, options = {}) {
       const form = document.createElement("form");
       form.className = "suspect-feedback-form";
-      form.hidden = (state.feedbackOpenFor !== draftId && !(draftId === "next-hint" && state.showHintForm)) || state.searching || Boolean(state.confirmedLocation);
+      form.hidden = (state.feedbackOpenFor !== draftId && !(draftId === "next-hint" && state.showHintForm)) || state.searching || Boolean(state.confirmed || state.confirmedLocation);
       const heading = document.createElement("p");
       heading.className = "suspect-feedback-title";
       heading.textContent = title;
@@ -1441,7 +1480,7 @@
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const current = state.feedbackDrafts.get(draftId) || { reasons: [], free_text: "" };
-        rerunLocationCandidate(bugId, candidate?.candidateId || null, current);
+        rerunLocationCandidate(bugId, candidate?.candidateId || null, current, options);
       });
       return form;
     }
@@ -1452,21 +1491,115 @@
         : readmeCandidateNode(candidate, index, candidate.round);
       item.dataset.candidateId = candidate.candidateId;
 
-      if (state.confirmedLocation?.candidateId === candidate.candidateId) {
-        const confirmed = document.createElement("span");
-        confirmed.className = "suspect-confirmed-badge";
-        confirmed.textContent = "확인됨";
-        item.append(confirmed);
+      const selectionMode = state.candidates.length >= 2;
+      const selected = state.selectedCandidateIds.includes(candidate.candidateId);
+      if (selectionMode) {
+        item.classList.add("suspect-selection-card");
+        if (selected) item.classList.add("is-selected");
+        else if (state.selectedCandidateIds.length > 0) item.classList.add("is-dimmed");
+        item.setAttribute("role", state.multiSelect ? "checkbox" : "radio");
+        item.setAttribute("aria-checked", String(selected));
+        item.setAttribute("aria-label", `${candidate.file || candidate.script} ${candidate.function} ${selected ? "선택됨" : "선택"}`);
+        item.tabIndex = 0;
+        const selectionTop = document.createElement("div");
+        selectionTop.className = "suspect-selection-top";
+        const control = document.createElement("input");
+        control.className = "suspect-selection-control";
+        control.type = state.multiSelect ? "checkbox" : "radio";
+        control.checked = selected;
+        control.tabIndex = -1;
+        control.setAttribute("aria-hidden", "true");
+        const title = document.createElement("span");
+        title.className = "suspect-feedback-title";
+        title.textContent = `후보 ${index + 1}`;
+        selectionTop.append(control, title);
+        if (selected) {
+          const selectedBadge = document.createElement("span");
+          selectedBadge.className = "suspect-selected-label";
+          selectedBadge.textContent = "선택됨";
+          selectionTop.append(selectedBadge);
+        }
+        item.prepend(selectionTop);
+
+        const select = () => {
+          if (state.confirmed || state.searching) return;
+          const selectedIds = new Set(state.selectedCandidateIds);
+          if (state.multiSelect) {
+            if (selectedIds.has(candidate.candidateId)) selectedIds.delete(candidate.candidateId);
+            else selectedIds.add(candidate.candidateId);
+            state.selectedCandidateIds = [...selectedIds];
+          } else {
+            state.selectedCandidateIds = [candidate.candidateId];
+          }
+          renderLocationState(bugId);
+        };
+        item.addEventListener("click", (event) => {
+          if (event.target.closest("button")) return;
+          select();
+        });
+        item.addEventListener("keydown", (event) => {
+          if (event.key === " " || event.key === "Enter") {
+            event.preventDefault();
+            select();
+            return;
+          }
+          if (!state.multiSelect && ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) {
+            event.preventDefault();
+            const direction = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+            const items = [...item.parentElement.querySelectorAll(".suspect-selection-card")];
+            const next = items[(items.indexOf(item) + direction + items.length) % items.length];
+            state.selectedCandidateIds = [next.dataset.candidateId];
+            renderLocationState(bugId);
+            window.bugPinSuspectNodes.get(bugId)?.content.querySelector(`[data-candidate-id="${CSS.escape(next.dataset.candidateId)}"]`)?.focus();
+          }
+        });
+
+        const actions = document.createElement("div");
+        actions.className = "suspect-card-actions";
+        const exclude = document.createElement("button");
+        exclude.className = "suspect-card-action is-exclude";
+        exclude.type = "button";
+        exclude.textContent = "이 후보 제외";
+        exclude.disabled = state.searching || state.confirmed;
+        exclude.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const candidateIndex = state.candidates.findIndex((itemCandidate) => itemCandidate.candidateId === candidate.candidateId);
+          if (candidateIndex < 0) return;
+          const [removed] = state.candidates.splice(candidateIndex, 1);
+          state.excluded.push({
+            ...removed,
+            reasons: ["후보별로 제외"],
+            free_text: "개발자가 선택 모드에서 이 후보를 제외했습니다.",
+            excludedRound: state.round,
+          });
+          state.selectedCandidateIds = state.selectedCandidateIds.filter((id) => id !== candidate.candidateId);
+          if (state.candidates.length < 2) {
+            state.multiSelect = false;
+            if (state.selectedCandidateIds.length > 1) state.selectedCandidateIds = state.selectedCandidateIds.slice(0, 1);
+          }
+          if (state.candidates.length === 0) {
+            state.baseStatus = "location_unavailable";
+            state.showHintForm = true;
+          }
+          renderLocationState(bugId);
+        });
+        actions.append(exclude);
+        item.append(actions);
+        return item;
       }
 
+      if (state.confirmed) return item;
       const actions = document.createElement("div");
       actions.className = "suspect-card-actions";
       const confirmButton = document.createElement("button");
       confirmButton.className = "suspect-card-action is-confirm";
       confirmButton.type = "button";
-      confirmButton.textContent = state.confirmedLocation?.candidateId === candidate.candidateId ? "확인됨" : "여기 맞음";
-      confirmButton.disabled = state.searching || Boolean(state.confirmedLocation);
+      confirmButton.textContent = state.confirmedCandidateIds.includes(candidate.candidateId) ? "확인됨" : "여기 맞음";
+      confirmButton.disabled = state.searching || Boolean(state.confirmed || state.confirmedLocation);
       confirmButton.addEventListener("click", () => {
+        state.confirmed = true;
+        state.confirmedCandidateIds = [candidate.candidateId];
+        state.selectedCandidateIds = [candidate.candidateId];
         state.confirmedLocation = { ...candidate };
         state.feedbackOpenFor = null;
         state.searchMessage = "";
@@ -1479,7 +1612,7 @@
       rejectButton.textContent = state.pendingRejection?.candidateId === candidate.candidateId
         ? "다시 찾는 중..."
         : "여기 아님 · 다른 곳 찾기";
-      rejectButton.disabled = state.searching || Boolean(state.confirmedLocation);
+      rejectButton.disabled = state.searching || Boolean(state.confirmed || state.confirmedLocation);
       rejectButton.setAttribute("aria-expanded", String(state.feedbackOpenFor === candidate.candidateId));
       rejectButton.addEventListener("click", () => {
         state.feedbackOpenFor = state.feedbackOpenFor === candidate.candidateId ? null : candidate.candidateId;
@@ -1535,6 +1668,169 @@
       return details;
     }
 
+    function confidenceRank(confidence) {
+      if (confidence === "높음") return 3;
+      if (confidence === "중간" || confidence === "보통") return 2;
+      if (confidence === "낮음") return 1;
+      return 0;
+    }
+
+    function orderedLocationCandidates(state) {
+      return state.candidates
+        .map((candidate, index) => ({ candidate, index }))
+        .sort((first, second) => confidenceRank(second.candidate.confidence) - confidenceRank(first.candidate.confidence) || first.index - second.index)
+        .map(({ candidate }) => candidate);
+    }
+
+    function locationCodeLabel(candidate) {
+      if (candidate.line) return candidate.line;
+      if (Number.isInteger(candidate.line_start) && Number.isInteger(candidate.line_end)) {
+        return candidate.line_start === candidate.line_end
+          ? `L${candidate.line_start}`
+          : `L${candidate.line_start}-L${candidate.line_end}`;
+      }
+      return "";
+    }
+
+    function confirmedSummaryText(candidates) {
+      const locations = candidates.map((candidate) => {
+        const file = candidate.file || candidate.script || "파일 미특정";
+        const line = locationCodeLabel(candidate);
+        const functionName = candidate.function ? `${candidate.function}()` : "";
+        return line ? `${file} ${line}` : `${file}${functionName ? ` / ${functionName}` : ""}`;
+      });
+      return `위치 확정 · ${locations.join(" + ")}`;
+    }
+
+    function updateBugCardLocationBadge(bugId, state) {
+      const nodes = window.bugPinSuspectNodes.get(bugId);
+      if (!nodes?.locationBadge) return;
+      const confirmedCandidates = state.confirmedCandidateIds
+        .map((candidateId) => state.candidates.find((candidate) => candidate.candidateId === candidateId))
+        .filter(Boolean);
+      nodes.locationBadge.hidden = !state.confirmed || confirmedCandidates.length === 0;
+      nodes.locationBadge.textContent = nodes.locationBadge.hidden ? "" : confirmedSummaryText(confirmedCandidates);
+      nodes.card.dataset.locationConfirmed = String(!nodes.locationBadge.hidden);
+    }
+
+    function renderCandidateContent(candidate, index, labelOverride = "") {
+      return candidate.source === "github"
+        ? codeEvidenceNode(candidate, index, candidate.round, labelOverride)
+        : readmeCandidateNode(candidate, index, candidate.round, labelOverride);
+    }
+
+    function confirmSelectedLocations(bugId, state) {
+      const chosen = state.selectedCandidateIds.filter((candidateId) => {
+        return state.candidates.some((candidate) => candidate.candidateId === candidateId);
+      });
+      if (chosen.length === 0 || state.searching) return;
+      state.confirmedCandidateIds = chosen;
+      state.confirmed = true;
+      state.confirmedLocation = state.candidates.find((candidate) => candidate.candidateId === chosen[0]) || null;
+      state.feedbackOpenFor = null;
+      state.searchMessage = "";
+      renderLocationState(bugId);
+    }
+
+    function renderConfirmedLocations(bugId, state, orderedCandidates) {
+      const chosen = orderedCandidates.filter((candidate) => state.confirmedCandidateIds.includes(candidate.candidateId));
+      const others = orderedCandidates.filter((candidate) => !state.confirmedCandidateIds.includes(candidate.candidateId));
+      const section = document.createElement("section");
+      section.className = "suspect-confirmed-section";
+      const heading = document.createElement("h6");
+      heading.className = "suspect-confirmed-heading";
+      heading.textContent = "확정 위치";
+      const badge = document.createElement("span");
+      badge.className = "suspect-confirmed-badge";
+      badge.textContent = "확인됨";
+      heading.append(badge);
+      section.append(heading);
+      const list = document.createElement("ul");
+      list.className = "suspect-list";
+      chosen.forEach((candidate, index) => {
+        const card = renderCandidateContent(candidate, index, `확정 위치 ${index + 1}`);
+        card.classList.add("suspect-confirmed-item");
+        list.append(card);
+      });
+      section.append(list);
+      const reselect = document.createElement("button");
+      reselect.className = "suspect-reselect-button";
+      reselect.type = "button";
+      reselect.textContent = "다시 선택";
+      reselect.addEventListener("click", () => {
+        state.confirmed = false;
+        state.confirmedLocation = null;
+        state.selectedCandidateIds = [...state.confirmedCandidateIds];
+        state.confirmedCandidateIds = [];
+        state.multiSelect = state.selectedCandidateIds.length > 1;
+        state.searchMessage = "";
+        renderLocationState(bugId);
+      });
+      section.append(reselect);
+      return { section, others };
+    }
+
+    function renderSelectionMode(bugId, state, orderedCandidates) {
+      const group = document.createElement("section");
+      group.className = "suspect-selection-mode";
+      const instruction = document.createElement("p");
+      instruction.className = "suspect-selection-heading";
+      instruction.textContent = `후보 ${orderedCandidates.length}개 · 실제 원인으로 보이는 위치를 하나 선택하세요`;
+      group.append(instruction);
+
+      const list = document.createElement("ul");
+      list.className = "suspect-selection-list";
+      list.setAttribute("role", state.multiSelect ? "group" : "radiogroup");
+      list.setAttribute("aria-label", "의심 위치 후보");
+      orderedCandidates.forEach((candidate, index) => list.append(candidateCardNode(bugId, candidate, index, state)));
+      group.append(list);
+
+      const actionbar = document.createElement("div");
+      actionbar.className = "suspect-selection-actionbar";
+      const confirm = document.createElement("button");
+      confirm.className = "suspect-selection-confirm";
+      confirm.type = "button";
+      confirm.textContent = "선택한 후보로 확정";
+      confirm.disabled = state.selectedCandidateIds.length === 0 || state.searching;
+      confirm.addEventListener("click", () => confirmSelectedLocations(bugId, state));
+
+      const rejectAll = document.createElement("button");
+      rejectAll.className = "suspect-selection-reject";
+      rejectAll.type = "button";
+      rejectAll.textContent = state.searching ? "다시 찾는 중..." : "전부 아님 · 다른 곳 찾기";
+      rejectAll.disabled = state.searching || state.candidates.length === 0;
+      rejectAll.addEventListener("click", () => {
+        state.feedbackOpenFor = state.feedbackOpenFor === "all-candidates" ? null : "all-candidates";
+        if (state.feedbackOpenFor && !state.feedbackDrafts.has("all-candidates")) {
+          state.feedbackDrafts.set("all-candidates", { reasons: [], free_text: "" });
+        }
+        renderLocationState(bugId);
+        if (state.feedbackOpenFor) window.bugPinSuspectNodes.get(bugId)?.content.querySelector('[data-feedback-input="all-candidates"]')?.focus();
+      });
+
+      const multiLabel = document.createElement("label");
+      multiLabel.className = "suspect-multi-select-toggle";
+      const multiCheckbox = document.createElement("input");
+      multiCheckbox.type = "checkbox";
+      multiCheckbox.checked = state.multiSelect;
+      const multiText = document.createElement("span");
+      multiText.textContent = "여러 곳을 함께 고쳐야 함";
+      multiCheckbox.addEventListener("change", () => {
+        state.multiSelect = multiCheckbox.checked;
+        if (!state.multiSelect && state.selectedCandidateIds.length > 1) {
+          state.selectedCandidateIds = state.selectedCandidateIds.slice(0, 1);
+        }
+        renderLocationState(bugId);
+      });
+      multiLabel.append(multiCheckbox, multiText);
+      actionbar.append(confirm, rejectAll, multiLabel);
+      if (state.feedbackOpenFor === "all-candidates") {
+        actionbar.append(buildLocationFeedbackForm(bugId, state, "all-candidates", "모든 후보가 아닌 이유", null, { rejectAll: true }));
+      }
+      group.append(actionbar);
+      return group;
+    }
+
     function renderLocationState(bugId) {
       const nodes = window.bugPinSuspectNodes.get(bugId);
       const state = window.bugPinLocationStates.get(bugId);
@@ -1551,10 +1847,27 @@
         nodes.content.append(confidence);
       }
 
-      if (state.candidates.length > 0) {
+      const orderedCandidates = orderedLocationCandidates(state);
+      if (state.confirmed) {
+        const confirmed = renderConfirmedLocations(bugId, state, orderedCandidates);
+        nodes.content.append(confirmed.section);
+        if (confirmed.others.length > 0) {
+          const details = document.createElement("details");
+          details.className = "suspect-other-candidates";
+          const summary = document.createElement("summary");
+          summary.textContent = `다른 후보 보기 (${confirmed.others.length})`;
+          const list = document.createElement("ul");
+          list.className = "suspect-list";
+          confirmed.others.forEach((candidate, index) => list.append(renderCandidateContent(candidate, index, `다른 후보 ${index + 1}`)));
+          details.append(summary, list);
+          nodes.content.append(details);
+        }
+      } else if (orderedCandidates.length >= 2) {
+        nodes.content.append(renderSelectionMode(bugId, state, orderedCandidates));
+      } else if (orderedCandidates.length === 1) {
         const list = document.createElement("ul");
         list.className = "suspect-list";
-        state.candidates.forEach((candidate, index) => list.append(candidateCardNode(bugId, candidate, index, state)));
+        list.append(candidateCardNode(bugId, orderedCandidates[0], 0, state));
         nodes.content.append(list);
       } else if (state.baseNote) {
         const note = document.createElement("p");
@@ -1592,21 +1905,22 @@
         nodes.content.append(codeEvidenceNode(state.missingEvidence, 0, 1));
       }
 
-      if (state.showHintForm && !state.searching && !state.confirmedLocation) {
+      if (state.showHintForm && !state.searching && !state.confirmed && !state.confirmedLocation) {
         nodes.content.append(buildLocationFeedbackForm(bugId, state, "next-hint", "추가 위치 힌트", null));
       }
-      if (state.confirmedLocation) {
+      if (state.confirmed || state.confirmedLocation) {
         const confirmedNote = document.createElement("p");
         confirmedNote.className = "suspect-confirmed-note";
         confirmedNote.textContent = "개발자가 이 의심 위치를 확인했습니다.";
         nodes.content.append(confirmedNote);
       }
+      updateBugCardLocationBadge(bugId, state);
     }
 
-    async function rerunLocationCandidate(bugId, candidateId, feedback) {
+    async function rerunLocationCandidate(bugId, candidateId, feedback, options = {}) {
       const state = window.bugPinLocationStates.get(bugId);
       const bug = window.bugPinAnalysis?.bugs.find((item) => item.bug_id === bugId);
-      if (!state || !bug || state.searching || state.confirmedLocation) return;
+      if (!state || !bug || state.searching || state.confirmed || state.confirmedLocation) return;
       const reasons = [...new Set(feedback.reasons || [])];
       const freeText = (feedback.free_text || "").trim();
       if (reasons.length === 0 && !freeText) {
@@ -1622,10 +1936,23 @@
         if (!rejectedCandidate) return;
         state.pendingRejection = {
           candidateId,
+          candidateIds: [candidateId],
+          entries: [{ ...rejectedCandidate, reasons, free_text: freeText, excludedRound: state.round }],
           entry: { ...rejectedCandidate, reasons, free_text: freeText, excludedRound: state.round },
         };
+      } else if (options.rejectAll) {
+        const entries = state.candidates.map((candidate) => ({
+          ...candidate,
+          reasons,
+          free_text: freeText,
+          excludedRound: state.round,
+        }));
+        state.pendingRejection = {
+          candidateIds: entries.map((entry) => entry.candidateId),
+          entries,
+        };
       }
-      state.feedbackDrafts.delete(candidateId || "next-hint");
+      state.feedbackDrafts.delete(options.rejectAll ? "all-candidates" : candidateId || "next-hint");
       state.feedbackOpenFor = null;
       state.round += 1;
       state.searching = true;
@@ -1647,12 +1974,12 @@
           function: candidate.function,
           reasons: candidate.reasons,
           free_text: candidate.free_text,
-        })).concat(state.pendingRejection ? [{
-          file: state.pendingRejection.entry.file,
-          function: state.pendingRejection.entry.function,
-          reasons: state.pendingRejection.entry.reasons,
-          free_text: state.pendingRejection.entry.free_text,
-        }] : []),
+        })).concat(state.pendingRejection?.entries.map((entry) => ({
+          file: entry.file,
+          function: entry.function,
+          reasons: entry.reasons,
+          free_text: entry.free_text,
+        })) || []),
         feedback: {
           file: rejectedCandidate?.file || "",
           function: rejectedCandidate?.function || "",
@@ -1705,8 +2032,11 @@
         state.showHintForm = state.candidates.length === 0;
       } finally {
         if (state.pendingRejection) {
-          state.candidates = state.candidates.filter((candidate) => candidate.candidateId !== state.pendingRejection.candidateId);
-          state.excluded.push(state.pendingRejection.entry);
+          const rejectedIds = new Set(state.pendingRejection.candidateIds);
+          state.candidates = state.candidates.filter((candidate) => !rejectedIds.has(candidate.candidateId));
+          state.excluded.push(...state.pendingRejection.entries);
+          state.selectedCandidateIds = state.selectedCandidateIds.filter((candidateId) => !rejectedIds.has(candidateId));
+          if (state.candidates.length < 2) state.multiSelect = false;
           state.pendingRejection = null;
         }
         state.searching = false;
@@ -1770,7 +2100,7 @@
           file: suspect.script,
           function: suspect.function,
           reason: suspect.reason,
-          confidence: location?.confidence || "중간",
+          confidence: suspect.confidence || location?.confidence || "중간",
           why_different: "초기 README 기반 후보",
         }));
         const state = createLocationState("readme", candidates, {
@@ -1890,7 +2220,10 @@
           const title = document.createElement("h4");
           title.className = "bug-card-title";
           title.textContent = bug.title;
-          titleWrap.append(title);
+          const locationBadge = document.createElement("span");
+          locationBadge.className = "bug-card-location-badge";
+          locationBadge.hidden = true;
+          titleWrap.append(title, locationBadge);
           topLeft.append(rank, titleWrap);
           const count = document.createElement("span");
           count.className = "bug-card-count";
@@ -1958,7 +2291,7 @@
               : "README를 올리거나 GitHub 저장소를 연결한 뒤 의심 위치를 확인할 수 있습니다.";
           suspectContent.append(suspectEmpty);
           suspectArea.append(suspectHeader, suspectContent);
-          window.bugPinSuspectNodes.set(bug.bug_id, { bugId: bug.bug_id, confidence, content: suspectContent });
+          window.bugPinSuspectNodes.set(bug.bug_id, { bugId: bug.bug_id, confidence, content: suspectContent, locationBadge, card });
           window.bugPinLocationStates.set(bug.bug_id, initialLocationState);
           detail.append(suspectArea);
           card.append(summary, detail);
