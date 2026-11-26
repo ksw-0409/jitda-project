@@ -484,14 +484,6 @@
     cursor: pointer;
   }
   .readme-sample-button:hover { background: #f4f7f2; }
-  .notion-access-form { display: grid; gap: 8px; margin-top: 10px; padding: 11px; border: 1px solid #dfe6dc; border-radius: 9px; background: #f8faf7; }
-  .notion-access-form[hidden] { display: none; }
-  .notion-access-label { color: #536558; font-size: 10px; font-weight: 720; }
-  .notion-access-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
-  .notion-access-input { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #d8e1d5; border-radius: 8px; background: #fff; color: #29382d; font: inherit; font-size: 12px; }
-  .notion-access-input:focus-visible { outline: 3px solid #95b788; outline-offset: 2px; }
-  .notion-access-submit { min-height: 40px; padding: 7px 11px; border: 0; border-radius: 8px; background: var(--forest); color: #fff; font: inherit; font-size: 10px; font-weight: 720; cursor: pointer; }
-  .notion-access-submit:disabled { cursor: wait; opacity: .6; }
   .readme-analyze-button {
     width: 100%;
     min-height: 42px;
@@ -916,13 +908,6 @@
               <button class="readme-button" id="choose-readme" type="button">README 파일 선택</button>
               <button class="readme-sample-button" id="load-sample-readme" type="button">샘플 README 불러오기</button>
               <button class="readme-sample-button" id="load-notion-readme" type="button">노션 README 불러오기</button>
-              <form class="notion-access-form" id="notion-access-form" hidden>
-                <label class="notion-access-label" for="notion-access-code-input">팀 접근 코드</label>
-                <div class="notion-access-row">
-                  <input class="notion-access-input" id="notion-access-code-input" type="password" autocomplete="current-password" aria-label="팀 접근 코드">
-                  <button class="notion-access-submit" id="submit-notion-access-code" type="submit">확인 후 불러오기</button>
-                </div>
-              </form>
               <a class="readme-download" href="sample_README.md" download>샘플 README 다운로드</a>
             </div>
             <section class="project-context-tabpanel" id="github-tab-panel" role="tabpanel" aria-labelledby="github-tab" tabindex="0" hidden>
@@ -1032,9 +1017,6 @@
     const chooseReadmeButton = document.getElementById("choose-readme");
     const loadSampleReadmeButton = document.getElementById("load-sample-readme");
     const loadNotionReadmeButton = document.getElementById("load-notion-readme");
-    const notionAccessForm = document.getElementById("notion-access-form");
-    const notionAccessCodeInput = document.getElementById("notion-access-code-input");
-    const submitNotionAccessCodeButton = document.getElementById("submit-notion-access-code");
     const locateSuspectsButton = document.getElementById("locate-suspects");
     const readmeFileName = document.getElementById("readme-file-name");
     const readmeFileHint = document.getElementById("readme-file-hint");
@@ -3015,48 +2997,15 @@
         loadSampleReadmeButton.textContent = "샘플 README 불러오기";
       }
     });
-    const notionAccessCodeSessionKey = "bugpin.notion-access-code";
-
-    function getSessionNotionAccessCode() {
-      try {
-        return sessionStorage.getItem(notionAccessCodeSessionKey) || "";
-      } catch {
-        return "";
-      }
-    }
-
-    function saveSessionNotionAccessCode(value) {
-      try {
-        sessionStorage.setItem(notionAccessCodeSessionKey, value);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    function clearSessionNotionAccessCode() {
-      try {
-        sessionStorage.removeItem(notionAccessCodeSessionKey);
-      } catch {
-        // sessionStorage 접근이 차단되어도 README 내용은 유지합니다.
-      }
-    }
-
-    async function requestNotionReadme(accessCode) {
+    async function requestNotionReadme() {
       if (loadNotionReadmeButton.disabled) return;
       loadNotionReadmeButton.disabled = true;
-      submitNotionAccessCodeButton.disabled = true;
       loadNotionReadmeButton.textContent = "노션 README 불러오는 중...";
-      submitNotionAccessCodeButton.textContent = "불러오는 중...";
       setReadmeStatus("노션 페이지에서 Markdown 본문을 불러오는 중입니다...", "loading");
-      let refocusAccessInput = false;
       try {
         const response = await fetch("/api/notion/readme", {
           method: "GET",
-          headers: {
-            Accept: "application/json",
-            "x-access-code": accessCode,
-          },
+          headers: { Accept: "application/json" },
           cache: "no-store",
         });
         let result;
@@ -3064,14 +3013,6 @@
           result = await response.json();
         } catch {
           throw new Error("노션 서버 응답을 읽을 수 없습니다.");
-        }
-        if (response.status === 401) {
-          clearSessionNotionAccessCode();
-          notionAccessCodeInput.value = "";
-          notionAccessForm.hidden = false;
-          refocusAccessInput = true;
-          setReadmeStatus("접근 코드가 올바르지 않습니다", "error");
-          return;
         }
         if (response.status === 429) {
           setReadmeStatus("잠시 후 다시 시도해 주세요", "error");
@@ -3082,46 +3023,18 @@
           throw new Error("노션 페이지의 Markdown 본문이 비어 있습니다.");
         }
         importReadme(result.markdown, "Notion README.md");
-        notionAccessForm.hidden = true;
-        notionAccessCodeInput.value = "";
         setReadmeStatus("노션 README를 불러왔습니다. 이제 ‘의심 위치 찾기’를 눌러 분석할 수 있습니다.", "success");
       } catch (error) {
         setReadmeStatus(error.message || "노션 README를 불러오지 못했습니다. 설정과 페이지 공유 권한을 확인해 주세요.", "error");
       } finally {
         loadNotionReadmeButton.disabled = false;
-        submitNotionAccessCodeButton.disabled = false;
         loadNotionReadmeButton.textContent = "노션 README 불러오기";
-        submitNotionAccessCodeButton.textContent = "확인 후 불러오기";
-        if (refocusAccessInput) notionAccessCodeInput.focus();
       }
     }
 
     loadNotionReadmeButton.addEventListener("click", () => {
       if (loadNotionReadmeButton.disabled) return;
-      const savedCode = getSessionNotionAccessCode();
-      if (savedCode) {
-        requestNotionReadme(savedCode);
-        return;
-      }
-      notionAccessForm.hidden = false;
-      setReadmeStatus("팀 접근 코드를 입력해 노션 README를 불러와 주세요.");
-      notionAccessCodeInput.focus();
-    });
-
-    notionAccessForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (loadNotionReadmeButton.disabled) return;
-      const accessCode = notionAccessCodeInput.value;
-      if (!accessCode) {
-        setReadmeStatus("접근 코드를 입력해 주세요", "error");
-        notionAccessCodeInput.focus();
-        return;
-      }
-      if (!saveSessionNotionAccessCode(accessCode)) {
-        setReadmeStatus("세션 저장소를 사용할 수 없어 접근 코드를 기억할 수 없습니다. 브라우저 설정을 확인해 주세요.", "error");
-        return;
-      }
-      requestNotionReadme(accessCode);
+      requestNotionReadme();
     });
     readmeDropzone.addEventListener("dragover", (event) => {
       event.preventDefault();

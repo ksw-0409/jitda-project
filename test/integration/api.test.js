@@ -19,16 +19,10 @@ let analysis;
 let notionMock;
 let notionPrivateApp;
 const notionTestToken = "notion-test-only-secret-value";
-const notionTestAccessCode = "notion-test-access-code-only";
 const notionTestPageId = "11111111-2222-4333-8444-555555555555";
 const notionMarkdown = "# Full Notion README body\n\n## Scripts\n- `PlayerMovement.cs` — Controls player movement.\n\nNotion body marker: NOTION_FULL_BODY_7f29.";
-let notionMissingAccessCodeApp;
-
-function getNotionReadme(baseUrl, options = {}) {
-  const headers = {};
-  if (options.accessCode !== undefined) headers["x-access-code"] = options.accessCode;
-  if (options.testIp) headers["x-bugpin-test-ip"] = options.testIp;
-  return fetch(`${baseUrl}/api/notion/readme`, { headers });
+function getNotionReadme(baseUrl) {
+  return fetch(`${baseUrl}/api/notion/readme`);
 }
 
 before(async () => {
@@ -41,19 +35,11 @@ before(async () => {
     notionPrivate: true,
     notionToken: notionTestToken,
     notionPageId: notionTestPageId,
-    notionAccessCode: notionTestAccessCode,
-    notionApiBaseUrl: notionMock.url,
-  });
-  notionMissingAccessCodeApp = await startBugPinServer(environment.mock.url, {
-    notionPrivate: true,
-    notionToken: notionTestToken,
-    notionPageId: notionTestPageId,
     notionApiBaseUrl: notionMock.url,
   });
 });
 
 after(async () => {
-  await notionMissingAccessCodeApp?.close();
   await notionPrivateApp?.close();
   await notionMock?.close();
   await environment?.close();
@@ -177,7 +163,7 @@ test("공개 환경에서는 Notion 본문 경로가 꺼져 있다", async () =>
 });
 
 test("Notion Markdown 본문을 서버에서 읽고 기존 /api/locate 요청에 그대로 전달한다", async () => {
-  const response = await getNotionReadme(notionPrivateApp.url, { accessCode: notionTestAccessCode });
+  const response = await getNotionReadme(notionPrivateApp.url);
   const result = await response.json();
   assert.equal(response.status, 200);
   assert.equal(result.markdown, notionMarkdown);
@@ -189,6 +175,7 @@ test("Notion Markdown 본문을 서버에서 읽고 기존 /api/locate 요청에
   assert.equal(notionRequest.path, `/v1/pages/${notionTestPageId}/markdown`);
   assert.equal(notionRequest.authorization, `Bearer ${notionTestToken}`);
   assert.equal(notionRequest.notionVersion, "2026-03-11");
+  assert.equal(notionRequest.hasAccessCodeHeader, false);
 
   const { response: locateResponse, body: locateBody } = await postJson(notionPrivateApp.url, "/api/locate", {
     bugs: [analysis.bugs[0]],
@@ -205,13 +192,13 @@ test("Notion Markdown 본문을 서버에서 읽고 기존 /api/locate 요청에
 
 test("빈 Notion Markdown과 페이지 권한 오류는 구분해 안내한다", async () => {
   notionMock.setMode("empty");
-  const emptyResponse = await getNotionReadme(notionPrivateApp.url, { accessCode: notionTestAccessCode });
+  const emptyResponse = await getNotionReadme(notionPrivateApp.url);
   const emptyBody = await emptyResponse.json();
   assert.equal(emptyResponse.status, 422);
   assert.match(emptyBody.error, /Markdown 본문이 비어 있습니다/);
 
   notionMock.setMode("permission-denied");
-  const permissionResponse = await getNotionReadme(notionPrivateApp.url, { accessCode: notionTestAccessCode });
+  const permissionResponse = await getNotionReadme(notionPrivateApp.url);
   const permissionBody = await permissionResponse.json();
   assert.equal(permissionResponse.status, 403);
   assert.match(permissionBody.error, /페이지 접근 권한이 없습니다/);
@@ -219,7 +206,7 @@ test("빈 Notion Markdown과 페이지 권한 오류는 구분해 안내한다",
   assert.doesNotMatch(JSON.stringify(permissionBody), new RegExp(notionTestToken));
 
   notionMock.setMode("unauthorized");
-  const authResponse = await getNotionReadme(notionPrivateApp.url, { accessCode: notionTestAccessCode });
+  const authResponse = await getNotionReadme(notionPrivateApp.url);
   const authBody = await authResponse.json();
   assert.equal(authResponse.status, 401);
   assert.match(authBody.error, /NOTION_TOKEN/);
@@ -297,64 +284,13 @@ test("재탐색에서 후보 없음과 잘못된 피드백을 구분해 반환�
   environment.mock.setMode("normal");
 });
 
-test("팀 전용 플래그가 켜져도 BUGPIN_ACCESS_CODE가 없으면 Notion API가 비활성화된다", async () => {
-  const notionRequestCountBefore = notionMock.requests.length;
-  const response = await getNotionReadme(notionMissingAccessCodeApp.url, { accessCode: notionTestAccessCode });
+test("전용 배포 플래그가 켜지면 별도 접근 코드 없이 Notion 페이지를 읽는다", async () => {
+  const requestCountBefore = notionMock.requests.length;
+  const response = await getNotionReadme(notionPrivateApp.url);
   const body = await response.json();
-  assert.equal(response.status, 404);
-  assert.match(body.error, /팀 접근 제한이 적용된 전용 환경/);
-  assert.equal(notionMock.requests.length, notionRequestCountBefore);
-});
-
-test("접근 코드 헤더 누락·불일치는 401이고 일치하면 Notion 본문을 읽는다", async () => {
-  const ip = "access-code-match-test";
-  const missing = await getNotionReadme(notionPrivateApp.url, { testIp: ip });
-  const missingBody = await missing.json();
-  assert.equal(missing.status, 401);
-  assert.deepEqual(missingBody, { error: "접근 코드가 올바르지 않습니다" });
-
-  const wrong = await getNotionReadme(notionPrivateApp.url, { accessCode: "wrong-test-code", testIp: ip });
-  const wrongBody = await wrong.json();
-  assert.equal(wrong.status, 401);
-  assert.deepEqual(wrongBody, { error: "접근 코드가 올바르지 않습니다" });
-  assert.doesNotMatch(JSON.stringify(wrongBody), new RegExp(notionTestAccessCode));
-
-  const valid = await getNotionReadme(notionPrivateApp.url, { accessCode: notionTestAccessCode, testIp: ip });
-  const validBody = await valid.json();
-  assert.equal(valid.status, 200);
-  assert.equal(validBody.markdown, notionMarkdown);
-  assert.doesNotMatch(JSON.stringify(validBody), new RegExp(notionTestAccessCode));
-});
-
-test("접근 코드가 비었거나 틀리면 Notion API 호출 전에 정확한 401을 반환한다", async () => {
-  const ip = "access-code-rejection-test";
-  const notionRequestCountBefore = notionMock.requests.length;
-  for (const options of [{ testIp: ip }, { accessCode: "incorrect-code", testIp: ip }]) {
-    const response = await getNotionReadme(notionPrivateApp.url, options);
-    assert.equal(response.status, 401);
-    const body = await response.json();
-    assert.deepEqual(body, { error: "접근 코드가 올바르지 않습니다" });
-    assert.doesNotMatch(JSON.stringify(body), new RegExp(notionTestAccessCode));
-  }
-  assert.equal(notionMock.requests.length, notionRequestCountBefore);
-});
-
-test("IP별 1분 동안 10회 넘게 실패하면 429로 잠시 차단한다", async () => {
-  const ip = "notion-rate-limit-test";
-  const notionRequestCountBefore = notionMock.requests.length;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const response = await getNotionReadme(notionPrivateApp.url, { accessCode: `wrong-${attempt}`, testIp: ip });
-    assert.equal(response.status, 401, `잘못된 시도 ${attempt + 1}회째는 401이어야 합니다`);
-    assert.deepEqual(await response.json(), { error: "접근 코드가 올바르지 않습니다" });
-  }
-
-  const limited = await getNotionReadme(notionPrivateApp.url, { accessCode: "wrong-eleventh", testIp: ip });
-  assert.equal(limited.status, 429);
-  assert.equal(limited.headers.get("retry-after"), "60");
-  assert.deepEqual(await limited.json(), { error: "잠시 후 다시 시도해 주세요" });
-
-  const blockedEvenWithCorrectCode = await getNotionReadme(notionPrivateApp.url, { accessCode: notionTestAccessCode, testIp: ip });
-  assert.equal(blockedEvenWithCorrectCode.status, 429);
-  assert.deepEqual(await blockedEvenWithCorrectCode.json(), { error: "잠시 후 다시 시도해 주세요" });
-  assert.equal(notionMock.requests.length, notionRequestCountBefore, "접근 코드가 거부된 요청은 Notion API를 호출하면 안 됩니다");
+  assert.equal(response.status, 200);
+  assert.equal(body.markdown, notionMarkdown);
+  assert.equal(notionMock.requests.length, requestCountBefore + 1);
+  assert.equal(notionMock.requests.at(-1).hasAccessCodeHeader, false);
+  assert.equal(notionMock.requests.at(-1).authorization, `Bearer ${notionTestToken}`);
 });

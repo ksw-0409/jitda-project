@@ -242,6 +242,7 @@ export async function startMockNotion() {
       path: request.url,
       authorization: request.headers.authorization,
       notionVersion: request.headers["notion-version"],
+      hasAccessCodeHeader: Object.hasOwn(request.headers, "x-access-code"),
     });
     if (mode === "permission-denied") {
       response.writeHead(403, { "Content-Type": "application/json" });
@@ -292,7 +293,6 @@ export async function startBugPinServer(mockUrl, options = {}) {
       NOTION_README_PRIVATE_DEPLOYMENT: options.notionPrivate ? "true" : "",
       NOTION_TOKEN: options.notionToken || "",
       NOTION_PAGE_ID: options.notionPageId || "",
-      BUGPIN_ACCESS_CODE: options.notionAccessCode || "",
       NOTION_API_BASE_URL: options.notionApiBaseUrl || "",
       NO_PROXY: "127.0.0.1,localhost",
       no_proxy: "127.0.0.1,localhost",
@@ -332,14 +332,12 @@ export async function startBugPinTestEnvironment(options = {}) {
       notionPrivate: options.notionPrivate,
       notionToken: options.notionPrivate ? "notion-test-only-token" : "",
       notionPageId: options.notionPrivate ? "11111111-2222-4333-8444-555555555555" : "",
-      notionAccessCode: options.notionPrivate ? (options.notionAccessCode || "bugpin-notion-test-code") : "",
       notionApiBaseUrl: notion?.url,
     });
     return {
       app,
       mock,
       notion,
-      notionAccessCode: options.notionPrivate ? (options.notionAccessCode || "bugpin-notion-test-code") : "",
       async close() {
         await app.close();
         await mock.close();
