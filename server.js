@@ -23,7 +23,7 @@ const notionPlanRateLimitMaxIps = 10_000;
 const notionPlanDatabaseId = normalizeNotionPageId(process.env.NOTION_PLAN_DATABASE_ID || "");
 const notionPlanSchemaRequirements = Object.freeze({
   "버그": "title",
-  "담당자": "select",
+  "담당자": "rich_text",
   "마감일": "date",
   "등록일": "date",
   "우선순위": "select",
@@ -179,12 +179,14 @@ function notionValidationPaths(payload) {
     .sort((first, second) => second.length - first.length)
     .map(escapeRegExp)
     .join("|");
-  const pathPattern = new RegExp(`\\bbody(?:(?:\\.(${segments}|[A-Za-z_][A-Za-z0-9_]*)|\\[(\\d{1,3})\\]))+`, "gu");
+  const pathPattern = new RegExp(`\\bbody(?:(?:\\.(${segments})|\\[(\\d{1,3})\\]))+`, "gu");
   const paths = new Set();
 
   for (const source of [payload?.code, payload?.message]) {
     if (typeof source !== "string") continue;
     for (const match of source.slice(0, 10_000).matchAll(pathPattern)) {
+      const followingCharacter = source[match.index + match[0].length] || "";
+      if (followingCharacter === "." || followingCharacter === "[") continue;
       paths.add(match[0]);
       if (paths.size >= 5) return [...paths];
     }
@@ -344,6 +346,12 @@ function validatePlanText(value, label, options = {}) {
   return normalized;
 }
 
+function normalizeNotionAssignee(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) throw new HttpError(400, "담당자를 입력해 주세요.");
+  return Array.from(normalized).slice(0, 200).join("");
+}
+
 function validIsoPlanDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
@@ -356,7 +364,7 @@ function validateNotionPlanRequest(body) {
   if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new HttpError(400, "수정 계획이 필요합니다.");
   const bugId = validatePlanText(plan.bug_id, "버그 ID", { required: true });
   const bugTitle = validatePlanText(plan.bug_title, "버그 제목", { required: true });
-  const assignee = validatePlanText(plan.assignee, "담당자", { required: true });
+  const assignee = normalizeNotionAssignee(plan.assignee);
   const dueDate = typeof plan.due_date === "string" ? plan.due_date : "";
   if (!validIsoPlanDate(dueDate)) throw new HttpError(400, "마감일은 YYYY-MM-DD 형식의 올바른 날짜여야 합니다.");
   if (!["high", "medium", "low"].includes(plan.priority)) throw new HttpError(400, "우선순위는 high, medium, low 중 하나여야 합니다.");
@@ -448,6 +456,10 @@ function notionRichTextProperty(value) {
   return { rich_text: notionRichText(value) };
 }
 
+function notionAssigneeProperty(value) {
+  return { rich_text: [{ text: { content: value } }] };
+}
+
 function notionPlanPriority(plan) {
   const values = {
     high: { label: "높음", emoji: "🔴" },
@@ -468,7 +480,7 @@ function notionPlanProperties(plan) {
   const locationText = [plan.location.file, plan.location.function, plan.location.lines].filter(Boolean).join(" · ");
   return {
     "버그": { title: notionRichText(title) },
-    "담당자": { select: { name: plan.assignee } },
+    "담당자": notionAssigneeProperty(plan.assignee),
     "마감일": { date: { start: plan.due_date } },
     "등록일": { date: { start: createdDate } },
     "우선순위": { select: { name: priority.label } },
@@ -551,7 +563,7 @@ function normalizeNotionPlanPayload(body) {
   const normalizedPlan = {
     bug_id: validateNotionPlanText(plan.bug_id, "버그 ID", true),
     bug_title: validateNotionPlanText(plan.bug_title, "버그 제목", true),
-    assignee: validateNotionPlanText(plan.assignee, "담당자", true),
+    assignee: normalizeNotionAssignee(plan.assignee),
     due_date: typeof plan.due_date === "string" ? plan.due_date : "",
     priority: plan.priority,
     memo: validateNotionPlanText(plan.memo, "메모"),
@@ -622,7 +634,7 @@ function notionPlanPropertyValues(plan) {
   const locationText = [plan.location.file, plan.location.function, plan.location.lines].filter(Boolean).join(" · ");
   return {
     "버그": { title: notionTextRuns(`${priority.emoji} ${plan.bug_title}`) },
-    "담당자": { select: { name: plan.assignee } },
+    "담당자": notionAssigneeProperty(plan.assignee),
     "마감일": { date: { start: plan.due_date } },
     "등록일": { date: { start: createdDate } },
     "우선순위": { select: { name: priority.label } },
@@ -733,7 +745,7 @@ function validateNotionPlanRequestLegacy(body) {
   };
   const bugId = text(plan.bug_id, "버그 ID", true);
   const bugTitle = text(plan.bug_title, "버그 제목", true);
-  const assignee = text(plan.assignee, "담당자", true);
+  const assignee = normalizeNotionAssignee(plan.assignee);
   const dueDate = typeof plan.due_date === "string" ? plan.due_date : "";
   if (!isValidPlanIsoDate(dueDate)) throw new HttpError(400, "마감일은 YYYY-MM-DD 형식의 올바른 날짜여야 합니다.");
   if (!["high", "medium", "low"].includes(plan.priority)) throw new HttpError(400, "우선순위는 high, medium, low 중 하나여야 합니다.");
@@ -801,7 +813,7 @@ function notionPlanFields(plan) {
   const location = [plan.location.file, plan.location.function, plan.location.lines].filter(Boolean).join(" · ");
   return {
     "버그": { title: notionTextRuns(`${priority.emoji} ${plan.bug_title}`) },
-    "담당자": { select: { name: plan.assignee } },
+    "담당자": notionAssigneeProperty(plan.assignee),
     "마감일": { date: { start: plan.due_date } },
     "등록일": { date: { start: dateCreated } },
     "우선순위": { select: { name: priority.label } },

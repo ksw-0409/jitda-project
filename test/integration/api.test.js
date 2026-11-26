@@ -453,7 +453,7 @@ test("Notion 수정계획 저장은 요청 필드를 검증하고 정확한 속�
   assert.ok(page);
   assert.equal(page.parent.data_source_id, notionMock.dataSourceId);
   assert.equal(plainNotionText(page.properties["버그"]), "🔴 접촉 피해가 너무 큼");
-  assert.equal(page.properties["담당자"].select.name, "강승우");
+  assert.equal(plainNotionText(page.properties["담당자"]), "강승우");
   assert.equal(page.properties["마감일"].date.start, "2026-12-03");
   assert.equal(page.properties["등록일"].date.start, "2026-11-26");
   assert.equal(page.properties["우선순위"].select.name, "높음");
@@ -477,11 +477,13 @@ test("Notion 수정계획 저장은 요청 필드를 검증하고 정확한 속�
   assert.doesNotMatch(JSON.stringify(notionRequest), new RegExp(notionTestToken));
 });
 
-test("새 담당자 선택지를 전달하고 긴 코드·제보 rich_text를 2,000자 미만으로 나눈다", async () => {
+test("담당자를 텍스트로 보내고 공백·200자 제한과 긴 코드·제보 분할을 적용한다", async () => {
   const longCode = "🙂".repeat(10_000);
   const longReport = "제보".repeat(1_000);
+  const paddedAssignee = `  ${"담당자🙂".repeat(70)}  `;
+  const expectedAssignee = Array.from(paddedAssignee.trim()).slice(0, 200).join("");
   const payload = planSyncPayload({
-    plan: { bug_id: "BUG-LONG-RICH-TEXT", assignee: "BugPin 테스트" },
+    plan: { bug_id: "BUG-LONG-RICH-TEXT", assignee: paddedAssignee },
     code_candidates: [{ file: "LongCode.cs", function: "Inspect", lines: "L1-L2", code: longCode }],
     reports: [{ report_id: "R-LONG", reporter: "BugPin 테스트", created_at: "2026-11-20 14:02", text: longReport }],
   });
@@ -489,9 +491,9 @@ test("새 담당자 선택지를 전달하고 긴 코드·제보 rich_text를 2,
   assert.equal(result.response.status, 200, JSON.stringify(result.body));
 
   const page = notionMock.pages.get(result.body.notion_page_id);
-  assert.equal(page.properties["담당자"].select.name, "BugPin 테스트");
+  assert.deepEqual(page.properties["담당자"], { rich_text: [{ text: { content: expectedAssignee } }] });
   const createRequest = notionMock.requests.findLast((request) => request.path === "/v1/pages" && request.method === "POST");
-  assert.equal(createRequest.body.properties["담당자"].select.name, "BugPin 테스트");
+  assert.deepEqual(createRequest.body.properties["담당자"], { rich_text: [{ text: { content: expectedAssignee } }] });
 
   const codeBlock = page.children.find((block) => block.type === "code");
   assert.ok(codeBlock);
@@ -528,7 +530,7 @@ test("같은 bug_id의 카드가 있으면 저장된 페이지 ID나 Bug ID 검�
   assert.equal(updated.body.notion_page_id, pageId);
   assert.equal(notionMock.pages.size, initialPageCount + 1);
   assert.equal(plainNotionText(page.properties["버그"]), "🟢 접촉 피해 재검토");
-  assert.equal(page.properties["담당자"].select.name, "민서");
+  assert.equal(plainNotionText(page.properties["담당자"]), "민서");
   assert.equal(page.properties["우선순위"].select.name, "낮음");
   assert.equal(page.properties["상태"].select.name, "계획됨");
   const activeAfterPageIdUpdate = page.children.filter((block) => !block.in_trash);
@@ -586,7 +588,7 @@ test("수정 계획 필드 검증과 Notion 생성·수정 오류는 민감한 �
     code_candidates: [{ file: "Private.cs", function: "Inspect", lines: "L1", code: "PRIVATE_CODE_MARKER" }],
   }));
   assert.equal(validationFailure.response.status, 400);
-  assert.match(validationFailure.body.error, /Notion 거절: body\.children\[4\]\.code\.language 값이 잘못됨; body\.properties\.담당자\.select\.name 값이 잘못됨/);
+  assert.match(validationFailure.body.error, /Notion 거절: body\.children\[4\]\.code\.language 값이 잘못됨; body\.properties\.담당자\.rich_text\[0\]\.text\.content 값이 잘못됨/);
   assert.doesNotMatch(JSON.stringify(validationFailure.body), /PRIVATE_ASSIGNEE_MARKER|PRIVATE_CODE_MARKER|should be c#/);
   notionMock.setMode("normal");
 });
@@ -625,4 +627,5 @@ test("서버 시작 시 계획 DB와 data source를 읽고 정확한 schema를 �
   assert.equal(response.status, 422);
   assert.match(body.error, /Notion 수정계획 DB 스키마 오류/);
   assert.match(body.error, /버그: title 형식/);
+  assert.match(body.error, /담당자: rich_text 형식이어야 하지만 select입니다/);
 });

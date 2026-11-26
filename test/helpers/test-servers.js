@@ -242,7 +242,7 @@ export async function startMockNotion() {
   let nextBlockId = 1;
   const schema = {
     "버그": { type: "title", title: {} },
-    "담당자": { type: "select", select: { options: [] } },
+    "담당자": { type: "rich_text", rich_text: {} },
     "마감일": { type: "date", date: {} },
     "등록일": { type: "date", date: {} },
     "우선순위": { type: "select", select: { options: ["높음", "보통", "낮음"].map((name) => ({ name })) } },
@@ -307,7 +307,11 @@ export async function startMockNotion() {
     }
     if (path === `/v1/data_sources/${dataSourceId}` && request.method === "GET") {
       const resultSchema = requestMode === "bad-schema"
-        ? { ...schema, "버그": { type: "rich_text", rich_text: {} } }
+        ? {
+          ...schema,
+          "버그": { type: "rich_text", rich_text: {} },
+          "담당자": { type: "select", select: { options: [] } },
+        }
         : schema;
       send(200, { object: "data_source", id: dataSourceId, properties: resultSchema });
       return;
@@ -324,13 +328,14 @@ export async function startMockNotion() {
     }
     if (path === "/v1/pages" && request.method === "POST") {
       if (requestMode === "validation-fail") {
-        const submittedAssignee = body?.properties?.["담당자"]?.select?.name || "";
+        const submittedAssignee = body?.properties?.["담당자"]?.rich_text
+          ?.map((part) => part.text?.content || "").join("") || "";
         const submittedCode = body?.children?.find((block) => block.type === "code")?.code?.rich_text
           ?.map((part) => part.text?.content || "").join("") || "";
         send(400, {
           object: "error",
           code: "validation_error",
-          message: `body.children[4].code.language should be c#; body.properties.담당자.select.name rejected (${submittedAssignee}; ${submittedCode})`,
+          message: `body.children[4].code.language should be c#; body.properties.담당자.rich_text[0].text.content rejected (${submittedAssignee}; ${submittedCode})`,
         });
         return;
       }

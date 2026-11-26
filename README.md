@@ -186,7 +186,7 @@ Notion API 응답에 Markdown 본문이 비어 있으면 422, integration 인증
 | 속성 이름 | Notion 속성 형식 |
 |---|---|
 | 버그 | 제목(title) |
-| 담당자 | 선택(select) |
+| 담당자 | 텍스트(rich text) |
 | 마감일, 등록일 | 날짜(date) |
 | 우선순위, 상태 | 선택(select) |
 | 위치, 파일, 함수, 줄, 메모, 버그 ID | 텍스트(rich text) |
