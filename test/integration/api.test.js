@@ -18,6 +18,7 @@ let readme;
 let analysis;
 let notionMock;
 let notionConfiguredApp;
+let notionTokenOnlyApp;
 const notionTestToken = "notion-test-only-secret-value";
 const notionTestPageId = "11111111-2222-4333-8444-555555555555";
 const notionMarkdown = "# Full Notion README body\n\n## Scripts\n- `PlayerMovement.cs` — Controls player movement.\n\nNotion body marker: NOTION_FULL_BODY_7f29.";
@@ -36,9 +37,14 @@ before(async () => {
     notionPageId: notionTestPageId,
     notionApiBaseUrl: notionMock.url,
   });
+  notionTokenOnlyApp = await startBugPinServer(environment.mock.url, {
+    notionToken: notionTestToken,
+    notionApiBaseUrl: notionMock.url,
+  });
 });
 
 after(async () => {
+  await notionTokenOnlyApp?.close();
   await notionConfiguredApp?.close();
   await notionMock?.close();
   await environment?.close();
@@ -154,11 +160,21 @@ test("요청 오류와 잘못된 LLM 응답은 HTTP 오류로 반환하고 두 �
   environment.mock.setMode("normal");
 });
 
-test("Notion 경로는 배포 트리거 없이 호출 가능하고 설정 누락만 503으로 안내한다", async () => {
+test("Notion 경로는 기능 플래그 없이 열리고 토큰 누락을 503으로 안내한다", async () => {
   const response = await fetch(`${environment.app.url}/api/notion/readme`);
   const body = await response.json();
   assert.equal(response.status, 503);
   assert.match(body.error, /NOTION_TOKEN/);
+  assert.doesNotMatch(body.error, /팀 접근 제한이 적용된 전용 환경/);
+});
+
+test("Notion 토큰만 있고 페이지 ID가 없으면 설정 오류를 503으로 안내한다", async () => {
+  const response = await getNotionReadme(notionTokenOnlyApp.url);
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.match(body.error, /NOTION_PAGE_ID/);
+  assert.doesNotMatch(body.error, /팀 접근 제한이 적용된 전용 환경/);
+  assert.equal(notionMock.requests.length, 0);
 });
 
 test("Notion Markdown 본문을 서버에서 읽고 기존 /api/locate 요청에 그대로 전달한다", async () => {
