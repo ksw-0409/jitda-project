@@ -13,6 +13,7 @@ const maxGithubFilesForAnalysis = 20;
 const maxGithubCodeCacheFiles = 12;
 const maxGithubBugsForAnalysis = 30;
 const maxCodeExcerptCharsPerFile = 3600;
+const maxNotionRichTextRunCodeUnits = 1800;
 const githubConnectionTtlMs = 30 * 60 * 1000;
 const githubConnections = new Map();
 const notionPlanRateLimits = new Map();
@@ -163,6 +164,40 @@ function getNotionApiUrl(path) {
   return url;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function notionValidationPaths(payload) {
+  const standardSegments = [
+    "properties", "children", "parent", "title", "rich_text", "select", "date", "number",
+    "start", "end", "name", "text", "content", "code", "language", "paragraph", "heading_2",
+    "heading_3", "bulleted_list_item", "numbered_list_item", "to_do", "quote", "callout", "toggle",
+    "divider", "type", "object", "annotations", "page_id", "database_id", "data_source_id",
+  ];
+  const segments = [...new Set([...standardSegments, ...Object.keys(notionPlanSchemaRequirements)])]
+    .sort((first, second) => second.length - first.length)
+    .map(escapeRegExp)
+    .join("|");
+  const pathPattern = new RegExp(`\\bbody(?:(?:\\.(${segments}|[A-Za-z_][A-Za-z0-9_]*)|\\[(\\d{1,3})\\]))+`, "gu");
+  const paths = new Set();
+
+  for (const source of [payload?.code, payload?.message]) {
+    if (typeof source !== "string") continue;
+    for (const match of source.slice(0, 10_000).matchAll(pathPattern)) {
+      paths.add(match[0]);
+      if (paths.size >= 5) return [...paths];
+    }
+  }
+  return [...paths];
+}
+
+function notionValidationErrorMessage(payload) {
+  const paths = notionValidationPaths(payload);
+  if (paths.length) return `Notion 거절: ${paths.map((path) => `${path} 값이 잘못됨`).join("; ")}`;
+  return "Notion이 요청을 거부했습니다. 데이터베이스 속성 또는 카드 본문 형식을 확인해 주세요.";
+}
+
 async function notionApiRequest(method, path, body) {
   const token = process.env.NOTION_TOKEN?.trim();
   if (!token) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
@@ -202,7 +237,7 @@ async function notionApiRequest(method, path, body) {
     if (response.status === 404) throw new HttpError(404, "Notion 데이터베이스나 페이지를 찾지 못했습니다. ID와 integration 공유 설정을 확인해 주세요.");
     if (response.status === 409) throw new HttpError(409, "Notion 데이터베이스가 갱신 중입니다. 잠시 후 다시 시도해 주세요.");
     if (response.status === 429) throw new HttpError(429, "Notion API 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.");
-    if (response.status === 400 || response.status === 422) throw new HttpError(response.status, "Notion이 요청을 거부했습니다. 데이터베이스 속성 형식과 선택지를 확인해 주세요.");
+    if (response.status === 400 || response.status === 422) throw new HttpError(response.status, notionValidationErrorMessage(payload));
     if (response.status >= 500) throw new HttpError(502, `Notion 서비스에 일시적인 오류가 있습니다 (HTTP ${response.status}).`);
     throw new HttpError(502, `Notion API 요청이 거부되었습니다 (HTTP ${response.status}).`);
   }
@@ -389,12 +424,24 @@ function validateNotionPlanRequest(body) {
 }
 
 function notionRichText(value) {
-  const chunks = [];
-  const points = Array.from(value || "");
-  for (let index = 0; index < points.length; index += 1800) {
-    chunks.push({ type: "text", text: { content: points.slice(index, index + 1800).join("") } });
+  return notionTextRuns(value);
+}
+
+function notionTextRuns(value) {
+  const text = typeof value === "string" ? value : "";
+  const runs = [];
+  for (let start = 0; start < text.length;) {
+    let end = Math.min(start + maxNotionRichTextRunCodeUnits, text.length);
+    if (end < text.length) {
+      const lastIncluded = text.charCodeAt(end - 1);
+      const next = text.charCodeAt(end);
+      if (lastIncluded >= 0xd800 && lastIncluded <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end -= 1;
+    }
+    if (end === start) end = Math.min(start + 2, text.length);
+    runs.push({ type: "text", text: { content: text.slice(start, end) } });
+    start = end;
   }
-  return chunks;
+  return runs;
 }
 
 function notionRichTextProperty(value) {
@@ -445,7 +492,7 @@ function notionCodeBlocks(candidate) {
   const chunks = notionRichText(code);
   const blocks = [];
   for (let index = 0; index < chunks.length; index += 100) {
-    blocks.push({ object: "block", type: "code", code: { rich_text: chunks.slice(index, index + 100), language: "csharp" } });
+    blocks.push({ object: "block", type: "code", code: { rich_text: chunks.slice(index, index + 100), language: "c#" } });
   }
   return [heading, ...blocks];
 }
@@ -559,15 +606,6 @@ function normalizeNotionPlanPayload(body) {
   return { plan: normalizedPlan, cause, codeCandidates, reports: normalizedReports, requestedPageId };
 }
 
-function notionTextRuns(value) {
-  const characters = Array.from(value || "");
-  const runs = [];
-  for (let index = 0; index < characters.length; index += 1800) {
-    runs.push({ type: "text", text: { content: characters.slice(index, index + 1800).join("") } });
-  }
-  return runs;
-}
-
 function notionRichTextValue(text) {
   return { rich_text: notionTextRuns(text) };
 }
@@ -610,13 +648,13 @@ function buildNotionPlanChildren(payload) {
   ];
   if (payload.codeCandidates.length === 0) {
     blocks.push(notionTextBlock("heading_3", "실제 코드 미제공"));
-    blocks.push({ object: "block", type: "code", code: { rich_text: notionTextRuns("// README 기반 후보입니다. 실제 GitHub 코드 스니펫은 연결되지 않았습니다."), language: "csharp" } });
+    blocks.push({ object: "block", type: "code", code: { rich_text: notionTextRuns("// README 기반 후보입니다. 실제 GitHub 코드 스니펫은 연결되지 않았습니다."), language: "c#" } });
   } else {
     for (const candidate of payload.codeCandidates) {
       blocks.push(notionTextBlock("heading_3", `${candidate.file} · ${candidate.function}${candidate.lines ? ` · ${candidate.lines}` : ""}`));
       const chunks = notionTextRuns(candidate.code || "// 실제 코드 스니펫이 비어 있습니다.");
       for (let index = 0; index < chunks.length; index += 100) {
-        blocks.push({ object: "block", type: "code", code: { rich_text: chunks.slice(index, index + 100), language: "csharp" } });
+        blocks.push({ object: "block", type: "code", code: { rich_text: chunks.slice(index, index + 100), language: "c#" } });
       }
     }
   }
@@ -790,7 +828,7 @@ function notionPlanChildren(payload) {
       blocks.push(notionTextBlock("heading_3", `${candidate.file} · ${candidate.function}${candidate.lines ? ` · ${candidate.lines}` : ""}`));
       const runs = notionTextRuns(candidate.code || "// 실제 코드 스니펫이 비어 있습니다.");
       for (let offset = 0; offset < runs.length; offset += 100) {
-        blocks.push({ object: "block", type: "code", code: { rich_text: runs.slice(offset, offset + 100), language: "csharp" } });
+        blocks.push({ object: "block", type: "code", code: { rich_text: runs.slice(offset, offset + 100), language: "c#" } });
       }
     }
   }

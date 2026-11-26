@@ -469,12 +469,43 @@ test("Notion 수정계획 저장은 요청 필드를 검증하고 정확한 속�
   assert.ok(activeBlocks.some((block) => block.type === "heading_2" && notionBlockText(block) === "원인 추정"));
   assert.ok(activeBlocks.some((block) => block.type === "paragraph" && notionBlockText(block).includes("접촉 피해가 매 프레임")));
   assert.ok(activeBlocks.some((block) => block.type === "heading_2" && notionBlockText(block) === "코드"));
-  assert.ok(activeBlocks.some((block) => block.type === "code" && block.code.language === "csharp" && block.code.rich_text.map((part) => part.text.content).join("").includes("health -= amount")));
+  assert.ok(activeBlocks.some((block) => block.type === "code" && block.code.language === "c#" && block.code.rich_text.map((part) => part.text.content).join("").includes("health -= amount")));
   assert.ok(activeBlocks.some((block) => block.type === "heading_2" && notionBlockText(block) === "제보 원문"));
   assert.ok(activeBlocks.filter((block) => block.type === "paragraph" && notionBlockText(block).includes("[R00")).length >= 2);
   const notionRequest = notionMock.requests.findLast((request) => request.path === "/v1/pages" && request.method === "POST");
   assert.equal(notionRequest.hasAuthorizationHeader, true);
   assert.doesNotMatch(JSON.stringify(notionRequest), new RegExp(notionTestToken));
+});
+
+test("새 담당자 선택지를 전달하고 긴 코드·제보 rich_text를 2,000자 미만으로 나눈다", async () => {
+  const longCode = "🙂".repeat(10_000);
+  const longReport = "제보".repeat(1_000);
+  const payload = planSyncPayload({
+    plan: { bug_id: "BUG-LONG-RICH-TEXT", assignee: "BugPin 테스트" },
+    code_candidates: [{ file: "LongCode.cs", function: "Inspect", lines: "L1-L2", code: longCode }],
+    reports: [{ report_id: "R-LONG", reporter: "BugPin 테스트", created_at: "2026-11-20 14:02", text: longReport }],
+  });
+  const result = await postJson(notionPlanTestApp.url, "/api/notion/plan", payload);
+  assert.equal(result.response.status, 200, JSON.stringify(result.body));
+
+  const page = notionMock.pages.get(result.body.notion_page_id);
+  assert.equal(page.properties["담당자"].select.name, "BugPin 테스트");
+  const createRequest = notionMock.requests.findLast((request) => request.path === "/v1/pages" && request.method === "POST");
+  assert.equal(createRequest.body.properties["담당자"].select.name, "BugPin 테스트");
+
+  const codeBlock = page.children.find((block) => block.type === "code");
+  assert.ok(codeBlock);
+  assert.equal(codeBlock.code.language, "c#");
+  assert.ok(codeBlock.code.rich_text.length > 1);
+  assert.ok(codeBlock.code.rich_text.every((part) => part.text.content.length <= 2000));
+  assert.equal(codeBlock.code.rich_text.map((part) => part.text.content).join(""), longCode);
+
+  const reportBlock = page.children.find((block) => block.type === "paragraph" && notionBlockText(block).startsWith("[R-LONG]"));
+  const expectedReport = `[R-LONG] BugPin 테스트 · 2026-11-20 14:02\n${longReport}`;
+  assert.ok(reportBlock);
+  assert.ok(reportBlock.paragraph.rich_text.length > 1);
+  assert.ok(reportBlock.paragraph.rich_text.every((part) => part.text.content.length <= 2000));
+  assert.equal(notionBlockText(reportBlock), expectedReport);
 });
 
 test("같은 bug_id의 카드가 있으면 저장된 페이지 ID나 Bug ID 검색으로 본문을 덮어쓴다", async () => {
@@ -547,6 +578,16 @@ test("수정 계획 필드 검증과 Notion 생성·수정 오류는 민감한 �
   assert.match(updateFailure.body.error, /일시적인 오류/);
   assert.doesNotMatch(JSON.stringify(updateFailure.body), /private mock failure|notion-test-only-secret-value/);
   assert.equal(notionMock.pages.get(existing.body.notion_page_id).children.filter((block) => !block.in_trash).length, oldBlockCount);
+  notionMock.setMode("normal");
+
+  notionMock.setMode("validation-fail");
+  const validationFailure = await postJson(notionWriteFailApp.url, "/api/notion/plan", planSyncPayload({
+    plan: { bug_id: "BUG-SAFE-NOTION-ERROR", assignee: "PRIVATE_ASSIGNEE_MARKER" },
+    code_candidates: [{ file: "Private.cs", function: "Inspect", lines: "L1", code: "PRIVATE_CODE_MARKER" }],
+  }));
+  assert.equal(validationFailure.response.status, 400);
+  assert.match(validationFailure.body.error, /Notion 거절: body\.children\[4\]\.code\.language 값이 잘못됨; body\.properties\.담당자\.select\.name 값이 잘못됨/);
+  assert.doesNotMatch(JSON.stringify(validationFailure.body), /PRIVATE_ASSIGNEE_MARKER|PRIVATE_CODE_MARKER|should be c#/);
   notionMock.setMode("normal");
 });
 

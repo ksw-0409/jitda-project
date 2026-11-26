@@ -323,6 +323,17 @@ export async function startMockNotion() {
       return;
     }
     if (path === "/v1/pages" && request.method === "POST") {
+      if (requestMode === "validation-fail") {
+        const submittedAssignee = body?.properties?.["담당자"]?.select?.name || "";
+        const submittedCode = body?.children?.find((block) => block.type === "code")?.code?.rich_text
+          ?.map((part) => part.text?.content || "").join("") || "";
+        send(400, {
+          object: "error",
+          code: "validation_error",
+          message: `body.children[4].code.language should be c#; body.properties.담당자.select.name rejected (${submittedAssignee}; ${submittedCode})`,
+        });
+        return;
+      }
       if (requestMode === "create-fail") {
         send(403, { object: "error", code: "restricted_resource", message: "mock write denied" });
         return;
