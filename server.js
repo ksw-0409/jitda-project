@@ -71,8 +71,42 @@ function readJsonBody(request) {
   });
 }
 
-function validNotionPageId(value) {
-  return typeof value === "string" && /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(value);
+function normalizeNotionPageId(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const input = value.trim();
+  let id = "";
+  const direct = input.match(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+
+  if (direct) {
+    id = direct[0];
+  } else {
+    let url;
+    try {
+      url = new URL(input);
+    } catch {
+      return null;
+    }
+    const hostname = url.hostname.toLowerCase();
+    const isNotionHost = ["notion.so", "www.notion.so", "notion.com", "www.notion.com", "notion.site", "www.notion.site"].includes(hostname) || hostname.endsWith(".notion.site");
+    if (!isNotionHost || !["https:", "http:"].includes(url.protocol)) return null;
+    let segments;
+    try {
+      segments = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    } catch {
+      return null;
+    }
+    for (const segment of segments.reverse()) {
+      const match = segment.match(/(?:^|[-_])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i);
+      if (match) {
+        id = match[1];
+        break;
+      }
+    }
+  }
+
+  const hex = id.replace(/-/g, "").toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(hex)) return null;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function getNotionMarkdownEndpoint(pageId) {
@@ -100,10 +134,11 @@ function getNotionMarkdownEndpoint(pageId) {
 
 async function fetchNotionReadmeMarkdown() {
   const token = process.env.NOTION_TOKEN?.trim();
-  const pageId = process.env.NOTION_PAGE_ID?.trim();
+  const rawPageId = process.env.NOTION_PAGE_ID?.trim();
+  const pageId = normalizeNotionPageId(rawPageId);
   if (!token) throw new HttpError(503, "서버에 NOTION_TOKEN 환경 변수를 설정해 주세요.");
-  if (!pageId || !validNotionPageId(pageId)) {
-    throw new HttpError(503, "서버에 올바른 NOTION_PAGE_ID 환경 변수를 설정해 주세요.");
+  if (!pageId) {
+    throw new HttpError(503, "NOTION_PAGE_ID에 32자리 페이지 ID 또는 Notion 페이지 링크를 입력해 주세요.");
   }
 
   const endpoint = getNotionMarkdownEndpoint(pageId);

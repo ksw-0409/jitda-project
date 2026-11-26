@@ -177,6 +177,51 @@ test("Notion 토큰만 있고 페이지 ID가 없으면 설정 오류를 503으�
   assert.equal(notionMock.requests.length, 0);
 });
 
+test("NOTION_PAGE_ID는 하이픈 유무와 Notion 페이지 링크에서 정규화된다", async () => {
+  const rawId = notionTestPageId.replace(/-/g, "");
+  const inputs = [
+    notionTestPageId,
+    rawId,
+    `https://www.notion.so/bugpin-workspace/Project-README-${rawId}?pvs=4`,
+    `https://notion.so/${notionTestPageId}`,
+  ];
+
+  for (const pageId of inputs) {
+    const app = await startBugPinServer(environment.mock.url, {
+      notionToken: notionTestToken,
+      notionPageId: pageId,
+      notionApiBaseUrl: notionMock.url,
+    });
+    try {
+      const response = await getNotionReadme(app.url);
+      const body = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(body));
+      assert.equal(body.markdown, notionMarkdown);
+      assert.equal(notionMock.requests.at(-1).path, `/v1/pages/${notionTestPageId}/markdown`);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test("Notion 링크에서 유효한 페이지 ID를 찾지 못하면 설정 오류로 처리한다", async () => {
+  const app = await startBugPinServer(environment.mock.url, {
+    notionToken: notionTestToken,
+    notionPageId: "https://www.notion.so/bugpin-workspace/readme-without-page-id?pvs=4",
+    notionApiBaseUrl: notionMock.url,
+  });
+  const requestCountBefore = notionMock.requests.length;
+  try {
+    const response = await getNotionReadme(app.url);
+    const body = await response.json();
+    assert.equal(response.status, 503);
+    assert.match(body.error, /32자리 페이지 ID 또는 Notion 페이지 링크/);
+    assert.equal(notionMock.requests.length, requestCountBefore);
+  } finally {
+    await app.close();
+  }
+});
+
 test("Notion Markdown 본문을 서버에서 읽고 기존 /api/locate 요청에 그대로 전달한다", async () => {
   const response = await getNotionReadme(notionConfiguredApp.url);
   const result = await response.json();
