@@ -1,6 +1,3 @@
-export const fixPlanStorageKey = "bugpin.fix-plans.v1";
-export const fixPlanAssigneeStorageKey = "bugpin.fix-plan-assignees.v1";
-
 const validPriorities = new Set(["high", "medium", "low"]);
 const validStatuses = new Set(["planned", "on_hold", "done"]);
 

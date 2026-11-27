@@ -321,7 +321,7 @@ export async function startMockNotion() {
       const matching = [...pages.values()].filter((page) => {
         const property = page.properties?.["버그 ID"];
         const value = (property?.rich_text || []).map((part) => part.text?.content || part.plain_text || "").join("");
-        return !page.archived && value === requestedBugId;
+        return value === requestedBugId;
       });
       send(200, { object: "list", results: matching.map((page) => ({ ...page, object: "page" })), has_more: false, next_cursor: null });
       return;

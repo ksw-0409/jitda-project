@@ -549,6 +549,39 @@ test("같은 bug_id의 카드가 있으면 저장된 페이지 ID나 Bug ID 검�
   assert.equal(notionMock.pages.size, initialPageCount + 1);
 });
 
+test("휴지통 카드와 삭제된 세션 카드 ID는 오류 대신 새 Notion 카드로 대체한다", async () => {
+  const bugId = "BUG-TRASH-RECREATE";
+  const initialPageCount = notionMock.pages.size;
+  const first = await postJson(notionPlanTestApp.url, "/api/notion/plan", planSyncPayload({ plan: { bug_id: bugId } }));
+  assert.equal(first.response.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.action, "created");
+  const trashedPage = notionMock.pages.get(first.body.notion_page_id);
+  assert.ok(trashedPage);
+  trashedPage.in_trash = true;
+
+  // 새로고침 후처럼 페이지 ID가 없는 요청은 DB에서 활성 카드만 찾아야 합니다.
+  const recreatedAfterTrash = await postJson(notionPlanTestApp.url, "/api/notion/plan", planSyncPayload({
+    plan: { bug_id: bugId, bug_title: "휴지통 카드 대신 새로 만들기" },
+  }));
+  assert.equal(recreatedAfterTrash.response.status, 200, JSON.stringify(recreatedAfterTrash.body));
+  assert.equal(recreatedAfterTrash.body.action, "created");
+  assert.notEqual(recreatedAfterTrash.body.notion_page_id, first.body.notion_page_id);
+  assert.equal(notionMock.pages.size, initialPageCount + 2);
+  assert.equal(notionMock.pages.get(first.body.notion_page_id).in_trash, true);
+
+  // 같은 세션에서 보관 중인 ID가 404가 되어도 계획 저장은 새 카드 생성을 이어갑니다.
+  const deletedPageId = recreatedAfterTrash.body.notion_page_id;
+  notionMock.pages.delete(deletedPageId);
+  const recreatedAfter404 = await postJson(notionPlanTestApp.url, "/api/notion/plan", {
+    ...planSyncPayload({ plan: { bug_id: bugId, bug_title: "404 후 새로 만들기" } }),
+    notion_page_id: deletedPageId,
+  });
+  assert.equal(recreatedAfter404.response.status, 200, JSON.stringify(recreatedAfter404.body));
+  assert.equal(recreatedAfter404.body.action, "created");
+  assert.notEqual(recreatedAfter404.body.notion_page_id, deletedPageId);
+  assert.equal(notionMock.pages.size, initialPageCount + 2);
+});
+
 test("수정 계획 필드 검증과 Notion 생성·수정 오류는 민감한 응답 전문 없이 반환한다", async () => {
   const missingAssignee = await postJson(notionWriteFailApp.url, "/api/notion/plan", planSyncPayload({ plan: { assignee: " " } }));
   assert.equal(missingAssignee.response.status, 400);

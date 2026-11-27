@@ -857,13 +857,19 @@ function readNotionRichText(property) {
   return (property?.rich_text || []).map((part) => part.plain_text || part.text?.content || "").join("");
 }
 
+function notionPageIsInTrash(page) {
+  return page?.in_trash === true || page?.archived === true;
+}
+
 async function queryNotionPlanPage(bugId) {
   const result = await notionApiRequest("POST", `/v1/data_sources/${encodeURIComponent(notionPlanDatabaseState.dataSourceId)}/query`, {
     filter: { property: "버그 ID", rich_text: { equals: bugId } },
     page_size: 100,
   });
   if (!Array.isArray(result?.results)) throw new HttpError(502, "Notion 수정계획 데이터베이스 검색 응답이 올바르지 않습니다.");
-  return result.results.find((page) => readNotionRichText(page.properties?.["버그 ID"]) === bugId) || null;
+  return result.results.find((page) => {
+    return !notionPageIsInTrash(page) && readNotionRichText(page.properties?.["버그 ID"]) === bugId;
+  }) || null;
 }
 
 async function resolveNotionPlanPageByQuery(payload) {
@@ -965,11 +971,13 @@ async function resolveNotionPlanPage(payload) {
   if (payload.requestedPageId) {
     try {
       const page = await notionApiRequest("GET", `/v1/pages/${encodeURIComponent(payload.requestedPageId)}`);
+      if (notionPageIsInTrash(page)) return null;
       const parentSourceId = page.parent?.data_source_id || "";
       const existingBugId = notionRichTextValue(page.properties?.["버그 ID"]);
       if (parentSourceId === notionPlanDatabaseState.dataSourceId && existingBugId === payload.plan.bug_id) return page;
     } catch (error) {
-      if (error.status !== 404) throw error;
+      if (error.status === 404) return null;
+      throw error;
     }
   }
   return queryNotionPlanPage(payload.plan.bug_id);
@@ -987,7 +995,13 @@ async function syncNotionPlan(body) {
 
   const payload = normalizeNotionPlanPayload(body);
   const existing = await resolveNotionPlanPage(payload);
-  if (existing?.id) return overwriteNotionPlanPage(existing.id, payload);
+  if (existing?.id) {
+    try {
+      return await overwriteNotionPlanPage(existing.id, payload);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+  }
 
   const children = buildNotionPlanBlocks(payload);
   const page = await notionApiRequest("POST", "/v1/pages", {

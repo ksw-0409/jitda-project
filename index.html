@@ -65,6 +65,9 @@
   .topbar-nav a[aria-current="page"] { color: #fff; }
   .topbar-nav .nav-index { margin-left: 5px; color: var(--lime); font-size: 10px; }
   .topbar-meta { gap: 9px; color: #d3ddd6; font-size: 13px; }
+  .topbar-actions { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+  .restart-workspace-button { min-height: 44px; padding: 8px 13px; border: 1px solid rgba(224, 235, 226, .48); border-radius: 9px; background: transparent; color: #f4f7f2; font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: background 150ms ease, border-color 150ms ease; }
+  .restart-workspace-button:hover { border-color: rgba(224, 235, 226, .8); background: rgba(255, 255, 255, .1); }
   .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); }
 
   main { width: min(1440px, 100%); margin: 0 auto; padding: 24px clamp(20px, 5vw, 76px) 40px; }
@@ -704,6 +707,8 @@
   @media (max-width: 760px) {
     .topbar { min-height: 67px; padding-inline: 20px; }
     .topbar-nav, .topbar-meta { display: none; }
+    .topbar-actions { gap: 0; }
+    .restart-workspace-button { min-height: 40px; padding: 6px 9px; font-size: 12px; }
     main { padding-top: 18px; }
     .breadcrumb { font-size: 12px; letter-spacing: 0; }
     .hero { display: block; padding: 14px 0 18px; }
@@ -791,7 +796,10 @@
       <a href="#workspace" aria-current="page">워크스페이스<span class="nav-index">01</span></a>
       <span>게임 QA 도구</span>
     </nav>
-    <div class="topbar-meta"><span class="status-dot" aria-hidden="true"></span><span>새 프로젝트</span></div>
+    <div class="topbar-actions">
+      <div class="topbar-meta"><span class="status-dot" aria-hidden="true"></span><span>새 프로젝트</span></div>
+      <button class="restart-workspace-button" id="restart-workspace" type="button">처음부터 다시</button>
+    </div>
   </header>
 
   <main id="home">
@@ -965,13 +973,10 @@
     import { getReadmeLocationPresentation, getSuspectStatusPresentation, normalizeAnalysisForView, parseReports, requiredColumns } from "/analysis-view-model.js";
     import {
       createFixPlan,
-      fixPlanAssigneeStorageKey,
-      fixPlanStorageKey,
       formatFixPlanDueDate,
       getFixPlanDeadline,
       getFixPlanExportRecords,
       getQuickFixPlanDates,
-      normalizeFixPlans,
       toLocalIsoDate,
       validateFixPlanInput,
     } from "/fix-plan-model.js";
@@ -1027,6 +1032,12 @@
     const githubCodePath = document.getElementById("github-code-path");
     const githubCodeLines = document.getElementById("github-code-lines");
     const githubCodeContent = document.getElementById("github-code-content");
+    const restartWorkspaceButton = document.getElementById("restart-workspace");
+
+    for (const key of ["bugpin.fix-plans.v1", "bugpin.fix-plan-assignees.v1", "bugpin.fix-plan-notion-pages.v1"]) {
+      try { window.localStorage.removeItem(key); } catch { /* 브라우저 저장소를 사용할 수 없어도 앱은 세션 내에서 동작합니다. */ }
+      try { window.sessionStorage.removeItem(key); } catch { /* 브라우저 저장소를 사용할 수 없어도 앱은 세션 내에서 동작합니다. */ }
+    }
 
     window.bugPinReports = [];
     window.bugPinAnalysis = null;
@@ -1036,29 +1047,13 @@
     window.bugPinLocationStates = new Map();
     window.bugPinGitHubConnection = null;
     const fixPlansByBugId = new Map();
-    try {
-      const storedPlans = JSON.parse(localStorage.getItem(fixPlanStorageKey) || "[]");
-      for (const plan of normalizeFixPlans(storedPlans)) fixPlansByBugId.set(plan.bug_id, plan);
-    } catch {
-      // 손상된 브라우저 저장 값은 읽기만 건너뛰고 새 계획을 다시 저장할 수 있습니다.
-    }
     window.bugPinFixPlans = fixPlansByBugId;
-    const notionPlanRefsStorageKey = "bugpin.fix-plan-notion-pages.v1";
     const notionPlanRefsByBugId = new Map();
     const notionPlanSyncStateByBugId = new Map();
-    try {
-      const storedRefs = JSON.parse(localStorage.getItem(notionPlanRefsStorageKey) || "{}");
-      if (storedRefs && typeof storedRefs === "object" && !Array.isArray(storedRefs)) {
-        for (const [bugId, ref] of Object.entries(storedRefs)) {
-          if (ref && typeof ref.notion_page_id === "string" && typeof ref.url === "string") {
-            notionPlanRefsByBugId.set(bugId, ref);
-            notionPlanSyncStateByBugId.set(bugId, { status: "synced", url: ref.url, error: "" });
-          }
-        }
-      }
-    } catch {
-      // 손상된 Notion 카드 링크 저장값은 다시 등록할 수 있도록 건너뜁니다.
-    }
+    window.bugPinNotionPageRefs = notionPlanRefsByBugId;
+    window.bugPinNotionSyncStates = notionPlanSyncStateByBugId;
+    const assigneeSuggestions = [];
+    window.bugPinAssigneeSuggestions = assigneeSuggestions;
     let githubFileRequestVersion = 0;
     let highlightedSummaryTarget = null;
     let summaryHighlightTimer = null;
@@ -1082,34 +1077,17 @@
       analysisStatus.hidden = true;
       analysisStatus.textContent = "";
       delete analysisStatus.dataset.kind;
-      bugCount.textContent = "0 BUGS";
+      bugCount.textContent = "버그 0건";
       emptyState.hidden = false;
-    }
-
-    function persistFixPlans() {
-      try {
-        localStorage.setItem(fixPlanStorageKey, JSON.stringify([...fixPlansByBugId.values()]));
-      } catch {
-        // 저장 공간이 차거나 비활성화된 경우 현재 화면의 계획은 그대로 유지합니다.
-      }
-      if (fixPlanExportButton) fixPlanExportButton.disabled = fixPlansByBugId.size === 0;
+      fixPlanExportButton = null;
     }
 
     function saveFixPlan(plan) {
       fixPlansByBugId.set(plan.bug_id, plan);
       window.bugPinFixPlans = fixPlansByBugId;
-      persistFixPlans();
+      if (fixPlanExportButton) fixPlanExportButton.disabled = fixPlansByBugId.size === 0;
       const state = window.bugPinLocationStates.get(plan.bug_id);
       if (state) state.plan = plan;
-    }
-
-    function persistNotionPlanRefs() {
-      const refs = Object.fromEntries(notionPlanRefsByBugId);
-      try {
-        localStorage.setItem(notionPlanRefsStorageKey, JSON.stringify(refs));
-      } catch {
-        // Notion page ID/URL cache is optional; retry can still find the card by bug ID.
-      }
     }
 
     function setNotionPlanSyncState(bugId, state) {
@@ -1120,7 +1098,6 @@
       } else if (previous.notion_page_id) {
         notionPlanRefsByBugId.set(bugId, previous);
       }
-      persistNotionPlanRefs();
     }
 
     function notionCauseForCandidates(candidates) {
@@ -1202,13 +1179,7 @@
     }
 
     function getAssigneeSuggestions() {
-      let names = [];
-      try {
-        const saved = JSON.parse(localStorage.getItem(fixPlanAssigneeStorageKey) || "[]");
-        if (Array.isArray(saved)) names = saved.filter((name) => typeof name === "string" && name.trim());
-      } catch {
-        names = [];
-      }
+      const names = [...assigneeSuggestions];
       for (const plan of fixPlansByBugId.values()) names.push(plan.assignee);
       return [...new Map(names.map((name) => [name.trim().toLocaleLowerCase(), name.trim()])).values()];
     }
@@ -1218,11 +1189,7 @@
       if (!normalized) return;
       const names = getAssigneeSuggestions().filter((saved) => saved.toLocaleLowerCase() !== normalized.toLocaleLowerCase());
       names.unshift(normalized);
-      try {
-        localStorage.setItem(fixPlanAssigneeStorageKey, JSON.stringify(names.slice(0, 30)));
-      } catch {
-        // 제안 목록 저장 실패는 계획 입력을 막지 않습니다.
-      }
+      assigneeSuggestions.splice(0, assigneeSuggestions.length, ...names.slice(0, 30));
     }
 
     function fixPlanPriorityLabel(priority) {
@@ -1712,6 +1679,77 @@
       previewRows.replaceChildren();
       clearAnalysis();
     }
+
+    function resetWorkspace() {
+      clearLoadedReports();
+      reportInput.value = "";
+      uploadFeedback.hidden = true;
+      uploadFeedback.textContent = "";
+      delete uploadFeedback.dataset.kind;
+
+      window.bugPinReadme = "";
+      window.bugPinLocations = null;
+      window.bugPinSuspectNodes = new Map();
+      window.bugPinLocationStates = new Map();
+      window.bugPinGitHubConnection = null;
+      githubFileRequestVersion += 1;
+      fixPlansByBugId.clear();
+      notionPlanRefsByBugId.clear();
+      notionPlanSyncStateByBugId.clear();
+      assigneeSuggestions.length = 0;
+      window.bugPinFixPlans = fixPlansByBugId;
+      window.bugPinAssigneeSuggestions = assigneeSuggestions;
+      window.bugPinNotionPageRefs = notionPlanRefsByBugId;
+      window.bugPinNotionSyncStates = notionPlanSyncStateByBugId;
+      bugDefaultOrder = [];
+      bugSortMode = "default";
+
+      readmeInput.value = "";
+      readmeFileName.textContent = "README.md를 선택해 주세요";
+      readmeFileHint.textContent = "스크립트 목록과 기능 설명이 담긴 파일";
+      readmeFeedback.textContent = "GitHub 연결은 실제 코드와 줄 번호를 확인하고, README 분석은 기능 설명으로 후보만 추정합니다.";
+      readmeFeedback.hidden = false;
+      delete readmeFeedback.dataset.kind;
+      selectProjectContextTab("readme");
+      updateProjectContextReadyState();
+
+      githubConnectForm.reset();
+      githubConnectButton.disabled = false;
+      githubConnectButton.textContent = "연결";
+      githubStatus.textContent = "공개 저장소는 바로 조회할 수 있습니다. 토큰은 브라우저에 전달되지 않습니다.";
+      githubStatus.hidden = false;
+      delete githubStatus.dataset.kind;
+      githubRepoSummary.hidden = true;
+      githubRepoName.textContent = "";
+      githubRepoBranch.textContent = "";
+      githubFileCount.textContent = "";
+      githubTreeNote.hidden = true;
+      githubTreeNote.textContent = "";
+      githubFileBrowser.hidden = true;
+      githubFilesSummary.textContent = "C# 파일 목록";
+      githubFilesList.replaceChildren();
+      githubCodePreview.hidden = true;
+      githubCodePath.textContent = "";
+      githubCodeLines.textContent = "";
+      githubCodeContent.textContent = "";
+
+      analyzeButton.disabled = false;
+      analyzeButton.textContent = "분석 시작";
+      locateSuspectsButton.disabled = true;
+      locateSuspectsButton.textContent = "의심 위치 찾기";
+      loadSampleButton.disabled = false;
+      loadSampleButton.textContent = "샘플 20건 불러오기";
+      loadSampleReadmeButton.disabled = false;
+      loadSampleReadmeButton.textContent = "샘플 README 불러오기";
+      loadNotionReadmeButton.disabled = false;
+      loadNotionReadmeButton.textContent = "노션 README 불러오기";
+      window.scrollTo({
+        top: 0,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    }
+
+    restartWorkspaceButton.addEventListener("click", resetWorkspace);
 
     function showUploadError(error) {
       clearLoadedReports();

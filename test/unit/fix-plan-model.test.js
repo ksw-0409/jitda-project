@@ -2,8 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createFixPlan,
-  fixPlanAssigneeStorageKey,
-  fixPlanStorageKey,
   formatFixPlanDueDate,
   getFixPlanDeadline,
   getQuickFixPlanDates,
@@ -103,9 +101,26 @@ test("마감일 표시가 3일·1~2일·당일·경과를 구분한다", () => {
   assert.equal(formatFixPlanDueDate("2026-12-03"), "12/3(목)");
 });
 
-test("계획 저장용 키와 담당자 자동완성 키가 별도로 고정되어 있다", () => {
-  assert.equal(fixPlanStorageKey, "bugpin.fix-plans.v1");
-  assert.equal(fixPlanAssigneeStorageKey, "bugpin.fix-plan-assignees.v1");
+test("수정 계획 객체에는 세션 밖 Notion 페이지 참조나 저장 필드가 섞이지 않는다", () => {
+  const { plan } = createFixPlan({
+    bug: { bug_id: "BUG-SESSION", title: "세션 안에서만 유지" },
+    candidates: [{ file: "PlayerHealth.cs", function: "TakeDamage", line: "L1-L2" }],
+    assignee: "강승우",
+    due_date: "2026-12-10",
+    now: fixedToday,
+  });
+  assert.deepEqual(Object.keys(plan), ["bug_id", "bug_title", "location", "assignee", "due_date", "priority", "memo", "status", "created_at", "updated_at"]);
+  assert.equal("notion_page_id" in plan, false);
+});
+
+test("담당자 자동완성 상태는 수정 계획 객체 바깥의 앱 세션에서만 다룬다", () => {
+  assert.equal("assignee_suggestions" in createFixPlan({
+    bug: { bug_id: "BUG-SESSION", title: "세션 계획" },
+    candidates: [{ file: "PlayerHealth.cs", function: "TakeDamage", line: "L1-L2" }],
+    assignee: "강승우",
+    due_date: "2026-12-10",
+    now: fixedToday,
+  }).plan, false);
 });
 
 test("저장소에서 다시 읽은 계획과 JSON 내보내기는 지정 형식만 유지한다", () => {
