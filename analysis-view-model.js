@@ -97,7 +97,7 @@ export function getReadmeLocationPresentation(location, isTemporary = false) {
   const hasCandidates = suspects.length > 0;
   return {
     status: hasCandidates ? "candidate" : "unavailable",
-    confidence: location?.confidence ? `README 분석 신뢰도: ${location.confidence}` : "근거 확인 필요",
+    confidence: location?.confidence || "",
     candidates: suspects.map((suspect) => ({
       script: suspect.script || "스크립트 미특정",
       function: suspect.function || "함수 미특정",

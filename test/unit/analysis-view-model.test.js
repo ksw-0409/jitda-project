@@ -117,7 +117,7 @@ test("README 후보는 후보 상태와 설명만 제공하고 실제 코드 줄
 
   assert.equal(presentation.status, "candidate");
   assert.equal(getSuspectStatusPresentation(presentation.status).label, "후보 있음");
-  assert.equal(presentation.confidence, "README 분석 신뢰도: 높음");
+  assert.equal(presentation.confidence, "높음");
   assert.deepEqual(presentation.candidates[0], {
     script: "PlayerMovement.cs",
     function: "Update()",

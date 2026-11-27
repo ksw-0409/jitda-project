@@ -7,6 +7,15 @@ let environment;
 let browserSession;
 
 function browser(...args) {
+  const [action, selector] = args;
+  if (["click", "scrollintoview"].includes(action) && typeof selector === "string" && selector.includes(".bug-card") && !/>\s*summary\s*$/.test(selector)) {
+    execFileSync("agent-browser", ["eval", `(() => { const target = document.querySelector(${JSON.stringify(selector)}); const card = target?.closest(".bug-card"); if (card && !card.open) card.open = true; return true; })()`], {
+      cwd: new URL("../..", import.meta.url),
+      env: { ...process.env, AGENT_BROWSER_SESSION: browserSession },
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+  }
   return execFileSync("agent-browser", args, {
     cwd: new URL("../..", import.meta.url),
     env: { ...process.env, AGENT_BROWSER_SESSION: browserSession },
@@ -162,9 +171,15 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
     "샘플 제보 분석",
   );
   const analyzed = evaluate(`({
-    summary: [...document.querySelectorAll(".analysis-summary-card")].map(card => ({
-      label: card.querySelector(".analysis-summary-label").textContent,
-      count: Number(card.querySelector(".analysis-summary-count").textContent)
+    summary: [...document.querySelectorAll(".analysis-summary-item")].map(item => ({
+      label: item.querySelector("span").textContent,
+      count: Number(item.querySelector(".analysis-summary-count").textContent.match(/\\d+/)[0])
+    })),
+    summaryPanel: [...document.querySelectorAll("#panel-summary-list .panel-summary-row")].map(row => ({
+      title: row.querySelector(".panel-summary-title").textContent,
+      count: row.querySelector(".panel-summary-count").textContent,
+      status: row.querySelector(".panel-summary-status").textContent,
+      kind: row.dataset.kind
     })),
     bugCards: [...document.querySelectorAll(".bug-card")].map(card => ({
       title: card.querySelector(".bug-card-title").textContent,
@@ -175,10 +190,26 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
     status: document.querySelector("#analysis-status").textContent
   })`);
   assert.deepEqual(analyzed.summary.map((item) => item.count), [5, 3, 0]);
+  assert.equal(analyzed.summaryPanel.length, 5);
+  assert.ok(analyzed.summaryPanel.every((item) => item.kind === "bug" && item.status === "위치 미확정"));
+  assert.ok(analyzed.summaryPanel.every((item) => /^제보 \d+건$/.test(item.count)));
   assert.equal(analyzed.bugCards.length, 5);
   assert.equal(analyzed.temporaryWarningHidden, true);
   assert.equal(analyzed.status, "AI 분석이 완료되었습니다.");
   assert.ok(analyzed.bugCards.every((card, index, cards) => index === 0 || cards[index - 1].count >= card.count));
+
+  browser("click", "#panel-summary-list .panel-summary-row:nth-of-type(1)");
+  const summaryNavigation = evaluate(`(() => ({
+    openCount: [...document.querySelectorAll(".bug-card")].filter(card => card.open).length,
+    firstOpen: document.querySelector(".bug-card:nth-of-type(1)").open,
+    expanded: document.querySelector("#panel-summary-list .panel-summary-row:nth-of-type(1)").getAttribute("aria-expanded"),
+    title: document.querySelector(".bug-card:nth-of-type(1) .bug-card-title").textContent
+  }))()`);
+  assert.equal(summaryNavigation.openCount, 1);
+  assert.equal(summaryNavigation.firstOpen, true);
+  assert.equal(summaryNavigation.expanded, "true");
+  assert.equal(summaryNavigation.title, analyzed.bugCards[0].title);
+  browser("eval", `document.querySelector(".bug-card:nth-of-type(1)").open = false; true`);
 
   browser("scrollintoview", "#load-notion-readme");
   browser("click", "#load-notion-readme");
@@ -236,7 +267,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
       entries,
       uniqueCount: new Set(entries.map(entry => entry.id)).size,
       allOriginalTextsMatch: entries.every(entry => original.get(entry.id) === entry.text),
-      allBugCardsOpen: [...document.querySelectorAll(".bug-card")].every(card => card.open),
+      openBugCards: [...document.querySelectorAll(".bug-card")].filter(card => card.open).length,
       allMoreSectionsOpen: [...document.querySelectorAll(".bug-card .more-reports")].every(details => details.open),
       opinionOpen: document.querySelector(".not-bugs-card").open,
       unclearEmptyMessage: document.querySelector(".analysis-group-unclear .analysis-group-empty")?.textContent || ""
@@ -245,7 +276,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(openedReports.entries.length, 20);
   assert.equal(openedReports.uniqueCount, 20);
   assert.equal(openedReports.allOriginalTextsMatch, true);
-  assert.equal(openedReports.allBugCardsOpen, true);
+  assert.equal(openedReports.openBugCards, 1);
   assert.equal(openedReports.allMoreSectionsOpen, true);
   assert.equal(openedReports.opinionOpen, true);
   assert.match(openedReports.unclearEmptyMessage, /추가 확인이 필요한 제보가 없습니다/);
@@ -278,8 +309,11 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   const locations = evaluate(`({
     labels: [...document.querySelectorAll(".suspect-confidence")].map(node => node.textContent),
     candidates: [...document.querySelectorAll(".suspect-candidate-label")].map(node => node.textContent),
-    scripts: [...document.querySelectorAll(".suspect-code-identity code")].map(node => node.textContent),
-    reasons: [...document.querySelectorAll(".suspect-empty")].map(node => node.textContent),
+    scripts: [...document.querySelectorAll(".suspect-candidate-label")].map(node => node.textContent),
+    reasons: [...document.querySelectorAll(".suspect-candidate-reason")].map(node => node.textContent),
+    confidenceBadges: [...document.querySelectorAll(".suspect-candidate-confidence")].map(node => node.textContent),
+    duplicatedConfidenceLabel: document.body.innerText.includes("README 분석 신뢰도:"),
+    initialDifferentReason: [...document.querySelectorAll(".suspect-rerun-message")].some(node => node.textContent.includes("이전 후보와 다른 점")),
     codeLines: document.querySelectorAll(".suspect-lines").length,
     codeBlocks: document.querySelectorAll(".suspect-code-source").length,
     planEditorsBeforeConfirmation: document.querySelectorAll(".fix-plan-card").length,
@@ -288,9 +322,12 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.equal(locations.labels.length, 5);
   assert.ok(locations.labels.every((label) => label === "후보 있음"));
   assert.equal(locations.candidates.length, 5);
-  assert.ok(locations.candidates.every((label) => label.startsWith("README 기반 의심 후보")));
-  assert.ok(locations.scripts.includes("PlayerMovement.cs"));
-  assert.ok(locations.scripts.includes("Update()"));
+  assert.ok(locations.candidates.every((label) => /^후보 \d+ · /.test(label)));
+  assert.ok(locations.scripts.some((label) => label.includes("PlayerMovement.cs")));
+  assert.ok(locations.scripts.some((label) => label.includes("PlayerMovement.cs · Update")));
+  assert.ok(locations.confidenceBadges.length > 0);
+  assert.equal(locations.duplicatedConfidenceLabel, false);
+  assert.equal(locations.initialDifferentReason, false);
   assert.equal(locations.codeLines, 0);
   assert.equal(locations.codeBlocks, 0);
   assert.equal(locations.planEditorsBeforeConfirmation, 0);
@@ -386,16 +423,19 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   const confirmed = evaluate(`(() => {
     const state = window.bugPinLocationStates.get("${firstBugId}");
     const card = document.querySelector(".bug-card:nth-of-type(1)");
+    const row = [...document.querySelectorAll("#panel-summary-list .panel-summary-row")].find(item => item.dataset.bugId === "${firstBugId}");
     return {
       status: card.querySelector(".suspect-confidence").textContent,
       confirmedFile: state.confirmedLocation?.file,
       badge: card.querySelector(".suspect-confirmed-section .suspect-confirmed-badge")?.textContent,
+      panelStatus: row?.querySelector(".panel-summary-status")?.textContent,
       stateRetained: state.candidates.some(candidate => candidate.file === "PlayerMovement.cs")
     };
   })()`);
   assert.equal(confirmed.status, "위치 확정");
   assert.equal(confirmed.confirmedFile, "PlayerHealth.cs");
   assert.equal(confirmed.badge, "확인됨");
+  assert.equal(confirmed.panelStatus, "위치 확정");
   assert.equal(confirmed.stateRetained, true);
 
   const initialPlanEditor = evaluate(`(() => {
@@ -492,6 +532,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
       summary: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-line").textContent,
       memo: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-summary-memo").textContent,
       planBadge: document.querySelector(".bug-card:nth-of-type(1) .bug-card-plan-badge").textContent,
+      panelPlanStatus: [...document.querySelectorAll("#panel-summary-list .panel-summary-row")].find(item => item.dataset.bugId === "${firstBugId}")?.querySelector(".panel-summary-status")?.textContent,
       notionBadge: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-notion-badge")?.textContent,
       notionLink: document.querySelector(".bug-card:nth-of-type(1) .fix-plan-notion-link")?.href,
       exportEnabled: !document.querySelector(".fix-plan-export").disabled
@@ -505,6 +546,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
   assert.match(savedPlan.summary, /담당 강승우 · \d+\/\d+\(.+\)까지 · 우선순위 높음/);
   assert.equal(savedPlan.memo, "OnCollisionStay2D에 피격 쿨타임 추가");
   assert.match(savedPlan.planBadge, /담당 강승우 · D-1/);
+  assert.match(savedPlan.panelPlanStatus, /담당 강승우 · D-1/);
   assert.equal(savedPlan.notionBadge, "Notion 등록됨");
   assert.match(savedPlan.notionLink, /^https:\/\/www\.notion\.so\//);
   assert.equal(environment.notion.pages.size, 1);
@@ -672,7 +714,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
     "빈 버그 묶음 분석",
   );
   const emptyResult = evaluate(`({
-    counts: [...document.querySelectorAll(".analysis-summary-count")].map(node => Number(node.textContent)),
+    counts: [...document.querySelectorAll(".analysis-summary-count")].map(node => Number(node.textContent.match(/\\d+/)[0])),
     cards: document.querySelectorAll(".bug-card").length,
     emptyText: document.querySelector(".analysis-group:not(.analysis-group-opinions):not(.analysis-group-unclear) .analysis-group-empty")?.textContent || "",
     opinions: document.querySelector(".analysis-group-opinions .analysis-group-meta").textContent
@@ -712,7 +754,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
     warning: document.querySelector("#analysis-temp-warning").textContent,
     warningVisible: !document.querySelector("#analysis-temp-warning").hidden,
     status: document.querySelector("#analysis-status").textContent,
-    counts: [...document.querySelectorAll(".analysis-summary-count")].map(node => Number(node.textContent))
+    counts: [...document.querySelectorAll(".analysis-summary-count")].map(node => Number(node.textContent.match(/\\d+/)[0]))
   })`);
   assert.match(demoResult.warning, /실제 AI 분석이 아닙니다/);
   assert.equal(demoResult.warningVisible, true);
@@ -750,6 +792,7 @@ test("브라우저에서 CSV→묶음·원문→README 위치 분석과 상태�
 test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·버그 카드 배지를 유지한다", async () => {
   environment.mock.setMode("normal");
   browser("set", "viewport", "1280", "900");
+  browser("eval", `localStorage.removeItem("bugpin.fix-plans.v1"); localStorage.removeItem("bugpin.fix-plan-assignees.v1"); true`);
   browser("reload");
   await waitFor("return { done: document.querySelector('#load-sample') !== null }", "다중 후보 E2E 시작");
   browser("click", "#load-sample");
@@ -781,8 +824,8 @@ test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·�
       controlTypes: cards.map(card => card.querySelector(".suspect-selection-control").type),
       individualConfirmButtons: cards.reduce((sum, card) => sum + card.querySelectorAll(".is-confirm").length, 0),
       excludeButtons: cards.reduce((sum, card) => sum + card.querySelectorAll(".is-exclude").length, 0),
-      displayedOrder: cards.map(card => [...card.querySelectorAll(".suspect-code-field code")].map(node => node.textContent)[0]),
-      confidenceOrder: cards.map(card => card.querySelector(".suspect-confidence-detail")?.textContent || ""),
+      displayedOrder: cards.map(card => card.querySelector(".suspect-candidate-label")?.textContent || ""),
+      confidenceOrder: cards.map(card => card.querySelector(".suspect-candidate-confidence")?.textContent || ""),
       confirmDisabledInitially: document.querySelector(".suspect-selection-confirm").disabled
     };
   })()`);
@@ -792,7 +835,7 @@ test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·�
   assert.equal(selectionMode.individualConfirmButtons, 0);
   assert.equal(selectionMode.excludeButtons, 2);
   assert.equal(selectionMode.confirmDisabledInitially, true);
-  assert.equal(selectionMode.displayedOrder[0], "GameManager.cs");
+  assert.match(selectionMode.displayedOrder[0], /후보 1 · GameManager\.cs · Update/);
   assert.match(selectionMode.confidenceOrder[0], /높음/);
   assert.match(selectionMode.confidenceOrder[1], /낮음/);
 
@@ -806,6 +849,8 @@ test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·�
       selectedClass: cards[0].classList.contains("is-selected"),
       dimmedClass: cards[1].classList.contains("is-dimmed"),
       dimmedOpacity: getComputedStyle(cards[1]).opacity,
+      selectedBorderWidth: getComputedStyle(cards[0]).borderTopWidth,
+      selectedBackground: getComputedStyle(cards[0]).backgroundColor,
       confirmDisabled: document.querySelector(".suspect-selection-confirm").disabled
     };
   })()`);
@@ -813,7 +858,9 @@ test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·�
   assert.equal(selection.selectedBadge, "선택됨");
   assert.equal(selection.selectedClass, true);
   assert.equal(selection.dimmedClass, true);
-  assert.equal(selection.dimmedOpacity, "0.6");
+  assert.equal(selection.dimmedOpacity, "0.68");
+  assert.equal(selection.selectedBorderWidth, "2px");
+  assert.equal(selection.selectedBackground, "rgb(234, 242, 232)");
   assert.equal(selection.confirmDisabled, false);
 
   browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle");
@@ -907,12 +954,15 @@ test("다중 후보는 선택 모드로 확정되고 여러 위치·재선택·�
     confirmed: window.bugPinLocationStates.get("${firstBugId}").confirmed,
     selectionModeVisible: Boolean(document.querySelector(".bug-card:nth-of-type(1) .suspect-selection-mode")),
     retainedSelected: [...document.querySelectorAll("${candidateCardSelector}")].filter(card => card.getAttribute("aria-checked") === "true").length,
-    summaryBadgeHidden: document.querySelector(".bug-card-location-badge").hidden
+    summaryBadgeHidden: document.querySelector(".bug-card-location-badge").hidden,
+    summaryBadgeText: document.querySelector(".bug-card-location-badge").textContent
   })`);
   assert.equal(reselected.confirmed, false);
   assert.equal(reselected.selectionModeVisible, true);
   assert.equal(reselected.retainedSelected, 1);
-  assert.equal(reselected.summaryBadgeHidden, true);
+  assert.equal(reselected.summaryBadgeHidden, false);
+  assert.equal(reselected.summaryBadgeText, "위치 미확정");
+  assert.equal(reselected.summaryBadgeText, "위치 미확정");
 
   browser("scrollintoview", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle input");
   browser("click", ".bug-card:nth-of-type(1) .suspect-multi-select-toggle input");
